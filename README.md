@@ -141,6 +141,9 @@ The program's table contains 19,330 entries. A research catalog groups those
 entries into costume families and resource ranges, with a second picker for
 the eight repeated banks inside each character family; the bracketed numbers
 shown in that picker are catalog positions, not stage IDs.
+The model search matches those research names globally (for example `Tina` or
+`Danger Zone`) and accepts pasted ranges written with a hyphen, en dash or em
+dash (`3320-3703`, `3320–3703` or `3320—3703`).
 
 Models open with **No textures**, which keeps the readable flat material
 colours. **From the model (auto)** reads the game's 3-by-13 costume/character
@@ -151,6 +154,12 @@ source banks directly and deliberately mirror the selected bank onto both
 sheets; that research view is useful for identifying data and for intentional
 texture swapping, but does not represent a complete in-game scene. Stage
 assembly, character rigs and motions remain future work.
+
+A captured `texram0`, `texram1` and `colorxlat` can still be dropped after the
+ROM. The luma table does not need to be dumped: DOA's boot routine at `0x10D0`
+copies `0x4000` bytes from main-data address `0x02FC0000` into the low bytes of
+16-bit luma RAM entries, and the explorer now performs that exact copy. An
+explicit `lumaram` dump remains accepted and takes precedence.
 
 ## Daytona USA
 
