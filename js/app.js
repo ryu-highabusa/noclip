@@ -706,10 +706,14 @@ async function loadTexramFiles(files) {
          * built per set go — see materialForSet. */
         state.viewer.clearSetMaterials();
 
-        /* A dump that brings both tables pins them too; one that brings only
-         * the sheets leaves the ROM-built pair in place. */
-        if (luma && cxlat) {
-            setLumaTables(luma, cxlat);
+        /* A colorxlat capture needs the luma table from the same hardware
+         * pipeline. Some games (currently DOA) have an exact ROM-side luma
+         * recipe even though their colorxlat builder is not understood yet,
+         * so reconstruct that half rather than requiring a redundant dump. */
+        const romLuma = !luma && cxlat && (state.rom.game.colors?.luma || state.rom.game.luma);
+        const effectiveLuma = luma ?? (romLuma ? buildLumaram(state.rom) : null);
+        if (effectiveLuma && cxlat) {
+            setLumaTables(effectiveLuma, cxlat);
             state.lutsPinned = true;
         }
 
@@ -720,9 +724,12 @@ async function loadTexramFiles(files) {
 
         $('#tex-drop').classList.add('loaded');
         status.textContent = state.lutsPinned
-            ? `atlas + colour tables from the dump (${loaded.length} files)`
+            ? romLuma
+                ? `atlas + colorxlat from dump; luma reconstructed from ROM (${loaded.length} files)`
+                : `atlas + colour tables from the dump (${loaded.length} files)`
             : `atlas from the dump, colour tables still built from ROM`;
-        status.title = loaded.join(', ');
+        status.title = [loaded.join(', '), romLuma ? 'luma reconstructed from ROM' : '']
+            .filter(Boolean).join(' · ');
     } catch (err) {
         console.error(err);
         status.textContent = `could not read that dump: ${err.message || err}`;
@@ -829,7 +836,11 @@ function modelTextureGuess(idx) {
         return { sets: [], set: null, how: 'none' };
     }
     if (state.texSetChoice !== null) {
-        return { sets: [state.texSetChoice], set: state.texSetChoice, how: 'chosen' };
+        const doa = state.rom.game.texture.raw?.layout === 'doa';
+        return {
+            sets: [state.texSetChoice], set: state.texSetChoice,
+            how: doa ? 'doa-full-bank' : 'chosen',
+        };
     }
     if (state.texSetCache.has(idx)) return state.texSetCache.get(idx);
     const guess = workOutTextureSets(idx);
@@ -905,8 +916,11 @@ function describeTextureGuess(g) {
     case 'doa-fighter': {
         const bank = g.selector & 0x7f;
         const half = g.selector & 0x80 ? 'upper' : 'lower';
-        return `fighter source bank ${bank.toString(16).toUpperCase().padStart(2, '0')}, ${half} half`;
+        const selector = g.selector.toString(16).toUpperCase().padStart(2, '0');
+        return `fighter selector ${selector}: source bank ${bank.toString(16).toUpperCase().padStart(2, '0')}, ${half} 0x20000 half`;
     }
+    case 'doa-stage': return `complete stage upload from source bank ${g.set.toString(16).toUpperCase().padStart(2, '0')}`;
+    case 'doa-full-bank': return `full source bank ${g.set.toString(16).toUpperCase().padStart(2, '0')} mirrored for research`;
     case 'untextured': return 'samples no texture';
     case 'fighter': return `${sets}: a fighter's part, on its pair and the boot set`;
     case 'boot': return state.rom.game.texture.raw
@@ -3423,6 +3437,12 @@ function renderStagePanel(stage, counts, totals, list) {
     }
 }
 
+/* Model ranges are often pasted from notes and prose, where typography turns
+ * an ASCII hyphen into an en dash or em dash. Treat all three as separators
+ * everywhere the query is classified or parsed. */
+const MODEL_RANGE_RE = /^(\d+)\s*[-\u2013\u2014]\s*(\d+)$/;
+const MODEL_INDEX_RE = /^(\d+)$/;
+
 function renderModelList() {
     const list = $('#model-list');
     const q = $('#model-search').value.trim();
@@ -3437,22 +3457,34 @@ function renderModelList() {
         lo = picked.first + pickedBank * picked.stride;
         hi = Math.min(picked.last, lo + picked.stride - 1);
     }
-    const range = q.match(/^(\d+)\s*-\s*(\d+)$/);
-    const single = q.match(/^(\d+)$/);
+    const range = q.match(MODEL_RANGE_RE);
+    const single = q.match(MODEL_INDEX_RE);
+    const searchKey = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '');
+    const hasNames = !!(state.rom.game.modelNames
+        || state.rom.game.modelCatalog?.entries || ranges.length);
+    const needle = hasNames && !range && !single && q ? searchKey(q) : null;
     if (range) { lo = +range[1]; hi = +range[2]; }
     else if (single) { lo = Math.max(0, +single[1] - 8); hi = +single[1] + 60; }
+    /* A text search is global. Otherwise a selected group such as Raidou
+     * would prevent a search for Tina from ever seeing a Tina entry. */
+    else if (needle) { lo = 0; hi = modelCount() - 1; }
     lo = Math.max(0, lo); hi = Math.min(modelCount() - 1, hi);
-    /* Anything else is a name to look for, in a game whose models have them. */
-    const named = !!(state.rom.game.modelNames || state.rom.game.modelCatalog?.entries);
-    const needle = named && !range && !single && q ? q.toLowerCase() : null;
 
     const rows = [];
-    for (let i = lo; i <= hi && rows.length < 1500; i++) {
+    let matches = 0;
+    for (let i = lo; i <= hi; i++) {
         if (onlyMesh && readModelEntry(state.rom, i).meshPtr === 0) continue;
-        if (needle && !(readModelName(state.rom, i) ?? '').toLowerCase().includes(needle)) continue;
-        rows.push(i);
+        if (needle) {
+            const modelName = readModelName(state.rom, i) ?? '';
+            const groupName = ranges.find((r) => i >= r.first && i <= r.last)?.name ?? '';
+            if (!searchKey(`${groupName} ${modelName}`).includes(needle)) continue;
+        }
+        matches++;
+        if (rows.length < 1500) rows.push(i);
     }
-    const scope = picked ? `${hi - lo + 1} in this group/bank` : `${modelCount()} table entries`;
+    const scope = needle
+        ? `${matches} name matches${matches > rows.length ? ' (first 1500 listed)' : ''}`
+        : picked ? `${hi - lo + 1} in this group/bank` : `${modelCount()} table entries`;
     $('#model-count').textContent = `${rows.length} shown of ${scope}`;
 
     list.innerHTML = '';
@@ -3465,6 +3497,10 @@ function renderModelList() {
         frag.appendChild(row);
     }
     list.appendChild(frag);
+    /* Replacing the rows does not reset an element's scroll position. Without
+     * this, a valid name search can appear blank or unchanged when the old
+     * list had been scrolled far down. */
+    list.scrollTop = 0;
     fillModelInfoLazily(list);
 
     /* An exact index in the box selects it outright. */
@@ -3559,7 +3595,14 @@ function fillModelInfoLazily(list) {
             if (!e.isIntersecting) continue;
             io.unobserve(e.target);
             const d = getModel(+e.target.dataset.index);
-            const name = readModelName(state.rom, +e.target.dataset.index);
+            const index = +e.target.dataset.index;
+            const range = state.rom.game.modelCatalog?.ranges?.find(
+                (r) => index >= r.first && index <= r.last);
+            /* DOA's catalog names come from research rather than strings in
+             * the ROM. Show the matching catalog name in each result so a
+             * search for "Tina" visibly returns Tina, instead of a seemingly
+             * unrelated wall of anonymous face counts. */
+            const name = readModelName(state.rom, index) ?? range?.name;
             const faces = d ? `${d.faceCount} faces` : 'no mesh';
             e.target.querySelector('[data-info]').textContent = name ? `${name} · ${faces}` : faces;
         }
@@ -4362,7 +4405,20 @@ function wireOptions() {
         state.stageViews[state.stageIndex] = e.target.value;
         loadStage(state.stageIndex, { keepCamera: true });
     });
-    $('#model-search').addEventListener('input', renderModelList);
+    $('#model-search').addEventListener('input', () => {
+        const q = $('#model-search').value.trim();
+        /* Text searches span every catalog group. Reflect that scope in the
+         * picker as well as in the results instead of leaving a stale group
+         * such as Raidou selected while displaying Tina. */
+        if (q && !MODEL_INDEX_RE.test(q) && !MODEL_RANGE_RE.test(q)) {
+            const catalog = modelCatalogControls();
+            if (catalog.group.value !== '-1') {
+                catalog.group.value = '-1';
+                renderModelCatalogBanks();
+            }
+        }
+        renderModelList();
+    });
     $('#model-only-mesh').addEventListener('change', renderModelList);
     const catalog = modelCatalogControls();
     catalog.group.addEventListener('change', () => {
@@ -4551,6 +4607,7 @@ function wireOptions() {
  * flat material colours and can be the profile's safer opening choice. */
 function renderTextureSetPicker() {
     const sel = $('#model-texset');
+    const texture = state.rom.game.texture;
     sel.innerHTML = '';
     const none = el('option');
     none.value = 'none';
@@ -4558,15 +4615,17 @@ function renderTextureSetPicker() {
     sel.appendChild(none);
     const auto = el('option');
     auto.value = 'auto';
-    auto.textContent = 'From the model (auto)';
+    auto.textContent = texture.autoLabel ?? 'From the model (auto)';
     sel.appendChild(auto);
-    for (let s = 0; s < state.rom.game.texture.sets; s++) {
+    for (let s = 0; s < texture.sets; s++) {
         const o = el('option');
         o.value = String(s);
-        o.textContent = state.rom.game.texture.setNames?.[s] ?? `set ${s}`;
+        o.textContent = texture.setNames?.[s] ?? `set ${s}`;
         sel.appendChild(o);
     }
-    const initial = state.rom.game.texture.defaultChoice === 'none' ? 'none' : 'auto';
+    const field = $('#model-texset-field');
+    field.querySelector('label').textContent = texture.pickerLabel ?? 'Texture set';
+    const initial = texture.defaultChoice === 'none' ? 'none' : 'auto';
     sel.value = initial;
     state.texSetChoice = initial === 'none' ? -1 : null;
     /* Assigned, not added: this runs again for every build loaded. */
@@ -4577,7 +4636,7 @@ function renderTextureSetPicker() {
         state.texramKey = null;
         loadModel(state.modelIndex, { keepCamera: true });
     };
-    $('#model-texset-field').hidden = false;
+    field.hidden = false;
 
     /* Scene colours and whose parts to read, the two a stage record would name.
      * Both are written on every rebuild, since a model names rows in one range
@@ -4831,7 +4890,8 @@ function loadGameContent() {
     /* The texture picker is for models no stage draws — see useModelScene. A
      * game whose stages carry every set between them does not need it. */
     if (modelsPickTextures()) renderTextureSetPicker();
-    if (state.rom.game.modelNames || state.rom.game.modelCatalog?.entries) {
+    if (state.rom.game.modelNames || state.rom.game.modelCatalog?.entries
+            || state.rom.game.modelCatalog?.ranges?.length) {
         $('#model-search').placeholder = 'Model index, range (500-520) or name';
     }
     renderModelCatalogPicker();
