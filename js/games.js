@@ -3053,7 +3053,9 @@ const doa = {
     /* Viewer-side research groups, not strings recovered from the ROM. The
      * bracketed numbers are catalog-group indices; they are deliberately not
      * presented as the game's stage or texture-bank IDs. Character families
-     * contain eight repeated banks, each `stride` entries wide. */
+     * contain eight repeated banks, each `stride` entries wide. `character`
+     * is the game's sparse ID (Raidou 0x0B, Lei Fang 0x0C), not the fighter's
+     * position in this catalog. */
     modelCatalog: {
         ranges: [
             { first: 0, last: 31, name: '[00] Common / system models' },
@@ -3072,7 +3074,7 @@ const doa = {
             { first: 7192, last: 8639, name: '[0C] Kasumi costume 1', character: 5, costume: 1, stride: 181, bodyOffset: 1, partNames: ['chest', 'head'] },
             { first: 8640, last: 9007, name: '[0D] Gen Fu costume 1', character: 6, costume: 1, stride: 46, bodyOffset: 1, partNames: ['chest', 'head'] },
             { first: 9008, last: 9375, name: '[0E] Gen Fu costume 0', character: 6, costume: 0, stride: 46, bodyOffset: 1, partNames: ['chest', 'head'] },
-            { first: 9376, last: 10295, name: '[0F] Lei Fang costume 2', character: 3, costume: 2, stride: 115, bodyOffset: 2, partNames: ['chest', 'head'] },
+            { first: 9376, last: 10295, name: '[0F] Lei Fang costume 2', character: 12, costume: 2, stride: 115, bodyOffset: 2, partNames: ['chest', 'head'] },
             { first: 10296, last: 10615, name: '[10] Zack costume 2', character: 0, costume: 2, stride: 40, bodyOffset: 2, partNames: ['chest', 'head'] },
             { first: 10616, last: 10983, name: '[11] Bayman costume 1', character: 8, costume: 1, stride: 46, bodyOffset: 1, partNames: ['chest', 'head'] },
             { first: 10984, last: 11367, name: '[12] Bayman costume 0', character: 8, costume: 0, stride: 48, bodyOffset: 1, partNames: ['chest', 'head'] },
@@ -3080,24 +3082,27 @@ const doa = {
             { first: 11840, last: 12255, name: '[14] Ryu Hayabusa costume 2', character: 4, costume: 2, stride: 52, bodyOffset: 2, partNames: ['chest', 'head'] },
             { first: 12256, last: 12631, name: '[15] Gen Fu costume 2', character: 6, costume: 2, stride: 47, bodyOffset: 2, partNames: ['chest', 'head'] },
             { first: 12632, last: 12999, name: '[16] Bayman costume 2', character: 8, costume: 2, stride: 46, bodyOffset: 2, partNames: ['chest', 'head'] },
-            { first: 13000, last: 13551, name: '[17] Raidou costume 0', character: 7, costume: 0, stride: 69, bodyOffset: 1, partNames: ['chest', 'head'] },
-            { first: 13552, last: 14103, name: '[18] Raidou costume 1', character: 7, costume: 1, stride: 69, bodyOffset: 1, partNames: ['chest', 'head'] },
-            { first: 14104, last: 15103, name: '[19] Lei Fang costume 1', character: 3, costume: 1, stride: 125, bodyOffset: 1, partNames: ['chest', 'head'] },
-            { first: 15104, last: 15663, name: '[1A] Lei Fang costume 0', character: 3, costume: 0, stride: 70, bodyOffset: 1, partNames: ['chest', 'head'] },
+            { first: 13000, last: 13551, name: '[17] Raidou costume 0', character: 11, costume: 0, stride: 69, bodyOffset: 1, partNames: ['chest', 'head'] },
+            { first: 13552, last: 14103, name: '[18] Raidou costume 1', character: 11, costume: 1, stride: 69, bodyOffset: 1, partNames: ['chest', 'head'] },
+            { first: 14104, last: 15103, name: '[19] Lei Fang costume 1', character: 12, costume: 1, stride: 125, bodyOffset: 1, partNames: ['chest', 'head'] },
+            { first: 15104, last: 15663, name: '[1A] Lei Fang costume 0', character: 12, costume: 0, stride: 70, bodyOffset: 1, partNames: ['chest', 'head'] },
 
-            { first: 15664, last: 16345, name: '[1B] 0x0 Freeway' },
-            { first: 16346, last: 16585, name: '[1C] 0x1 BuraiZhen' },
-            { first: 16586, last: 16809, name: '[1D] 0x2 Hangar' },
-            { first: 16810, last: 17011, name: "[1E] 0x3 L's Castle" },
-            { first: 17012, last: 17275, name: '[1F] 0x4 Danger Zone' },
-            { first: 17276, last: 17631, name: '[20] 0x8 Forest' },
-            { first: 17632, last: 17887, name: '[21] 0xB Beach' },
-            { first: 17888, last: 18387, name: '[22] 0x6 Name-entry' },
-            { first: 18388, last: 19057, name: '[23] 0xA Construction' },
+            /* `textureSet` is the source-directory index used by the stage.
+             * It is deliberately separate from the bracketed catalog number
+             * and from the stage ID: all three number different things. */
+            { first: 15664, last: 16345, name: '[1B] Stage 0x0 Freeway', textureSet: 0 },
+            { first: 16346, last: 16585, name: '[1C] Stage 0x1 Burai Zhen', textureSet: 1 },
+            { first: 16586, last: 16809, name: '[1D] Stage 0x2 Hangar', textureSet: 2 },
+            { first: 16810, last: 17011, name: "[1E] Stage 0x3 L's Castle", textureSet: 3 },
+            { first: 17012, last: 17275, name: '[1F] Stage 0x4 Danger Zone', textureSet: 4 },
+            { first: 17276, last: 17631, name: '[20] Stage 0x8 Forest', textureSet: 5 },
+            { first: 17632, last: 17887, name: '[21] Stage 0xB Beach', textureSet: 6 },
+            { first: 17888, last: 18387, name: '[22] Stage 0x6 Name Entry', textureSet: 7 },
+            { first: 18388, last: 19057, name: '[23] Stage 0xA Construction', textureSet: 8 },
             { first: 19058, last: 19061, name: '[24] Resource group' },
             { first: 19062, last: 19065, name: '[25] Resource group' },
             { first: 19066, last: 19069, name: '[26] Resource group' },
-            { first: 19070, last: 19329, name: '[27] 0x5 DOATEC' },
+            { first: 19070, last: 19329, name: '[27] Stage 0x5 DOATEC', textureSet: 12 },
         ],
     },
 
@@ -3105,6 +3110,12 @@ const doa = {
     paletteRegion: 'maincpu',
     paletteOffset: 0x00062af2,
     paletteCount: 0x01e4,
+
+    /* FUN_000010D0 copies exactly 0x4000 bytes from address 0x02FC0000 to
+     * the low byte of consecutive 16-bit entries at LUMA RAM 0x11400000.
+     * This reproduces doalumaram.bin byte-for-byte; DOA's base colorxlat
+     * initializer remains separate and is not claimed here. */
+    luma: { source: 'mainData', data: 0x00fc0000, bytes: 0x4000 },
 
     texture: {
         raw: {
@@ -3122,20 +3133,22 @@ const doa = {
         residentSet: null,
         defaultSet: 0,
         defaultChoice: 'none',
+        pickerLabel: 'Texture source / upload mode',
+        autoLabel: 'Auto — use fighter selector or stage source',
         setNames: [
-            'source 00 — Freeway — Zack',
-            'source 01 — Burai Zhen — Tina',
-            'source 02 — Hangar — JannLee',
-            "source 03 — L's Castle — Unknown Character",
-            'source 04 — Danger Zone — Hayabusa',
-            'source 05 — Forest — Kasumi',
-            'source 06 — Beach — GenFu',
-            'source 07 — Name Entry — Unknown Character',
-            'source 08 — Construction — Bayman',
-            'source 09 — Unknown Stage — Unknown Character',
-            'source 0A — Unknown Stage — Unknown Character',
-            'source 0B — Unknown Stage — Raidou',
-            'source 0C — DOATEC — Leifang',
+            'Full bank 00 (research) — stage 0x0 Freeway',
+            'Full bank 01 (research) — stage 0x1 Burai Zhen',
+            'Full bank 02 (research) — stage 0x2 Hangar',
+            "Full bank 03 (research) — stage 0x3 L's Castle",
+            'Full bank 04 (research) — stage 0x4 Danger Zone',
+            'Full bank 05 (research) — stage 0x8 Forest',
+            'Full bank 06 (research) — stage 0xB Beach',
+            'Full bank 07 (research) — stage 0x6 Name Entry / solid screens',
+            'Full bank 08 (research) — stage 0xA Construction',
+            'Full bank 09 (research) — no known stage',
+            'Full bank 0A (research) — no known stage',
+            'Full bank 0B (research) — no known stage',
+            'Full bank 0C (research) — stage 0x5 DOATEC',
         ],
     },
     features: { stages: false, characters: false, motions: false, cells: false },
