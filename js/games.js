@@ -2984,8 +2984,163 @@ const vf2 = {
     features: { stages: true, characters: false, motions: true, bodies: true },
 };
 
+/* ---- Dead or Alive ------------------------------------------------------- */
+
+/*
+ * First-pass Models-tab profile for the Model 2B revision-C set.
+ *
+ * Geometry facts are taken from the game's model-submission routines: the
+ * table begins at main-data offset 0x3A160, entries are 16 bytes, and the
+ * first three words are UV halfword index, material halfword index and encoded
+ * polygon address. The fourth word is the polygon count.
+ *
+ * DOA's texture sources are thirteen raw 0xC0000-byte banks in main_data. The
+ * program-ROM directory at 0xCE8D0 lists them in source-address order. Runtime
+ * captures show a bank copied directly into texture RAM; the exact rules that
+ * combine a stage bank with fighter overlays are still under investigation,
+ * so the Models tab initially mirrors the selected bank to both sheets.
+ */
+const doa = {
+    id: 'doa',
+    name: 'Dead or Alive (Model 2B, Revision C)',
+    identify: ['epr-19379c.15', 'epr-19380c.16'],
+    regions: {
+        maincpu: {
+            size: 0x100000,
+            parts: [
+                [0x000000, 'epr-19379c.15', 0x5cc62fbe, 'epr-19380c.16', 0x58cfeaa9],
+            ],
+        },
+        mainData: {
+            size: 0x2000000,
+            parts: [
+                [0x0000000, 'mpr-19318.11', 0xab431bfe, 'mpr-19319.12', 0xc5cb694d],
+                [0x0800000, 'mpr-19316.9',  0x2d2d1b1a, 'mpr-19317.10', 0x96b17bcf],
+                [0x1000000, 'mpr-19314.7',  0xa8d963fb, 'mpr-19315.8',  0x90ae5682],
+                [0x1800000, 'mpr-19312.5',  0x1dcedb10, 'mpr-19313.6',  0x8c63055e],
+                /* MAME mirrors the final 4 MB pair into 0x1C00000-0x1FFFFFF. */
+                [0x1c00000, 'mpr-19312.5',  0x1dcedb10, 'mpr-19313.6',  0x8c63055e],
+            ],
+        },
+        polygons: {
+            size: 0x2000000,
+            parts: [
+                [0x0000000, 'mpr-19322.17', 0xd0e6ecf0, 'mpr-19325.21', 0x7cbe432d],
+                [0x0800000, 'mpr-19323.18', 0x453d3f4a, 'mpr-19326.22', 0xb976da02],
+                [0x1000000, 'mpr-19324.19', 0x0d6bf454, 'mpr-19327.23', 0x6a75634c],
+            ],
+        },
+        textures: {
+            size: 0x800000,
+            parts: [
+                [0x000000, 'mpr-19321.27', 0x9c49e845, 'mpr-19320.25', 0x190c017f],
+            ],
+        },
+    },
+
+    modelTable: { offset: 0x0003a160, count: 19330, stride: 16 },
+    meshPtr: { subtract: 0x02000010, add: 0x10 },
+
+    /* One pointer per model-table index. Valid pointers name a seven-float
+     * record: max xyz, min xyz, then an origin-centred culling radius. */
+    modelBounds: {
+        pointers: 0x00085980,
+        records: 0x00020000,
+        count: 3816,
+        addressBase: 0x02000000,
+        recordSize: 0x1c,
+    },
+
+    /* Viewer-side research groups, not strings recovered from the ROM. The
+     * bracketed numbers are catalog-group indices; they are deliberately not
+     * presented as the game's stage or texture-bank IDs. Character families
+     * contain eight repeated banks, each `stride` entries wide. */
+    modelCatalog: {
+        ranges: [
+            { first: 0, last: 31, name: '[00] Common / system models' },
+
+            { first: 32, last: 351, name: '[01] Zack costume 0', stride: 40, bodyOffset: 1, partNames: ['chest', 'head'] },
+            { first: 352, last: 671, name: '[02] Zack costume 1', stride: 40, bodyOffset: 1, partNames: ['chest', 'head'] },
+            { first: 672, last: 1583, name: '[03] Tina costume 0', stride: 114, bodyOffset: 1, partNames: ['chest', 'head'] },
+            { first: 1584, last: 2495, name: '[04] Tina costume 1', stride: 114, bodyOffset: 1, partNames: ['chest', 'head'] },
+            { first: 2496, last: 2863, name: '[05] Jann Lee costume 2', stride: 46, bodyOffset: 1, partNames: ['chest', 'head'] },
+            { first: 2864, last: 3319, name: '[06] Jann Lee costume 0', stride: 57, bodyOffset: 1, partNames: ['chest', 'head'] },
+            { first: 3320, last: 3703, name: '[07] Tina costume 2', stride: 48, bodyOffset: 2, partNames: ['chest', 'head'] },
+            { first: 3704, last: 4943, name: '[08] Kasumi costume 2', stride: 155, bodyOffset: 2, partNames: ['chest', 'head'] },
+            { first: 4944, last: 5359, name: '[09] Ryu Hayabusa costume 0', stride: 52, bodyOffset: 1, partNames: ['chest', 'head'] },
+            { first: 5360, last: 5775, name: '[0A] Ryu Hayabusa costume 1', stride: 52, bodyOffset: 1, partNames: ['chest', 'head'] },
+            { first: 5776, last: 7191, name: '[0B] Kasumi costume 0', stride: 177, bodyOffset: 1, partNames: ['chest', 'head'] },
+            { first: 7192, last: 8639, name: '[0C] Kasumi costume 1', stride: 181, bodyOffset: 1, partNames: ['chest', 'head'] },
+            { first: 8640, last: 9007, name: '[0D] Gen Fu costume 1', stride: 46, bodyOffset: 1, partNames: ['chest', 'head'] },
+            { first: 9008, last: 9375, name: '[0E] Gen Fu costume 0', stride: 46, bodyOffset: 1, partNames: ['chest', 'head'] },
+            { first: 9376, last: 10295, name: '[0F] Lei Fang costume 2', stride: 115, bodyOffset: 2, partNames: ['chest', 'head'] },
+            { first: 10296, last: 10615, name: '[10] Zack costume 2', stride: 40, bodyOffset: 2, partNames: ['chest', 'head'] },
+            { first: 10616, last: 10983, name: '[11] Bayman costume 1', stride: 46, bodyOffset: 1, partNames: ['chest', 'head'] },
+            { first: 10984, last: 11367, name: '[12] Bayman costume 0', stride: 48, bodyOffset: 1, partNames: ['chest', 'head'] },
+            { first: 11368, last: 11839, name: '[13] Jann Lee costume 1', stride: 59, bodyOffset: 2, partNames: ['chest', 'head'] },
+            { first: 11840, last: 12255, name: '[14] Ryu Hayabusa costume 2', stride: 52, bodyOffset: 2, partNames: ['chest', 'head'] },
+            { first: 12256, last: 12631, name: '[15] Gen Fu costume 2', stride: 47, bodyOffset: 2, partNames: ['chest', 'head'] },
+            { first: 12632, last: 12999, name: '[16] Bayman costume 2', stride: 46, bodyOffset: 2, partNames: ['chest', 'head'] },
+            { first: 13000, last: 13551, name: '[17] Raidou costume 0', stride: 69, bodyOffset: 1, partNames: ['chest', 'head'] },
+            { first: 13552, last: 14103, name: '[18] Raidou costume 1', stride: 69, bodyOffset: 1, partNames: ['chest', 'head'] },
+            { first: 14104, last: 15103, name: '[19] Lei Fang costume 1', stride: 125, bodyOffset: 1, partNames: ['chest', 'head'] },
+            { first: 15104, last: 15663, name: '[1A] Lei Fang costume 0', stride: 70, bodyOffset: 1, partNames: ['chest', 'head'] },
+
+            { first: 15664, last: 16345, name: '[1B] Resource group' },
+            { first: 16346, last: 16585, name: '[1C] Resource group' },
+            { first: 16586, last: 16809, name: '[1D] Resource group' },
+            { first: 16810, last: 17011, name: '[1E] Resource group' },
+            { first: 17012, last: 17275, name: '[1F] Danger Zone resources' },
+            { first: 17276, last: 17631, name: '[20] Resource group' },
+            { first: 17632, last: 17887, name: '[21] Resource group' },
+            { first: 17888, last: 18387, name: '[22] Name-entry resources' },
+            { first: 18388, last: 19057, name: '[23] Resource group' },
+            { first: 19058, last: 19061, name: '[24] Resource group' },
+            { first: 19062, last: 19065, name: '[25] Resource group' },
+            { first: 19066, last: 19069, name: '[26] Resource group' },
+            { first: 19070, last: 19329, name: '[27] Resource group' },
+        ],
+    },
+
+    /* Counted source table at maincpu 0x62AF0: 0x01E4 then 484 BGR555 words. */
+    paletteRegion: 'maincpu',
+    paletteOffset: 0x00062af2,
+    paletteCount: 0x01e4,
+
+    texture: {
+        raw: {
+            layout: 'doa',
+            bankTable: 0x000ce8d0,
+            /* Sixteen stage IDs mapped to the source-bank pointers above;
+             * repeated pointers are intentional and the order is different. */
+            stageBankTable: 0x000ce890,
+            bankSize: 0x000c0000,
+        },
+        sets: 13,
+        residentSet: null,
+        defaultSet: 0,
+        setNames: [
+            'bank 00 — Freeway',
+            'bank 01 — Burai Zhen',
+            'bank 02 — Hangar',
+            "bank 03 — L's Castle",
+            'bank 04 — Danger Zone',
+            'bank 05 — Forest',
+            'bank 06 — Beach',
+            'bank 07 — Name Entry / shared screens',
+            'bank 08 — Construction',
+            'bank 09 — unidentified overlay',
+            'bank 0A — unidentified overlay',
+            'bank 0B — unidentified overlay',
+            'bank 0C — DOATEC',
+        ],
+    },
+    features: { stages: false, characters: false, motions: false, cells: false },
+};
+
 export const GAMES = [sfight, schamp, fvipers, hotdp, hotdo, hotd,
-    daytona, daytona93, daytonase, daytonas, daytonat, daytonata, daytonam, daytonagtx, vcop, vf2];
+    daytona, daytona93, daytonase, daytonas, daytonat, daytonata, daytonam, daytonagtx, vcop, vf2,
+    doa];
 
 /*
  * Sets the viewer recognises but cannot open yet (Pinboard #660, parity with

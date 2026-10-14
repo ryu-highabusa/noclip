@@ -810,6 +810,39 @@ function buildDaytonaTexram(rom, texSets) {
 }
 
 /*
+ * Dead or Alive keeps thirteen already-expanded 0xC0000-byte banks in
+ * main_data. Its program-ROM directory contains absolute main-data pointers.
+ * Captured sheets contain a direct copy of a bank followed by 0x40000 zeroes;
+ * some runtime scenes replace a middle portion of one sheet with another bank.
+ * Until that overlay selection is understood, mirror the chosen complete bank
+ * to both sheets. This makes the ROM banks inspectable without pretending that
+ * the result is an exact reconstruction of every in-game scene.
+ */
+function buildDoaTexram(rom, texSets) {
+    const raw = rom.game.texture.raw;
+    const tex = new Uint8Array(SHEET_BYTES * 2);
+    const sets = [].concat(texSets).filter((s) => s >= 0 && s < rom.game.texture.sets);
+    const set = sets.length ? sets[sets.length - 1] : rom.game.texture.defaultSet;
+    if (set == null) return { sheet0: tex.subarray(0, SHEET_BYTES), sheet1: tex.subarray(SHEET_BYTES), pages: 0 };
+
+    const tableEntry = raw.bankTable + set * 4;
+    if (tableEntry < 0 || tableEntry + 4 > rom.maincpu.length) {
+        return { sheet0: tex.subarray(0, SHEET_BYTES), sheet1: tex.subarray(SHEET_BYTES), pages: 0 };
+    }
+    const ptr = rom.mainCpuView.getUint32(tableEntry, true);
+    const off = ptr - MAIN_DATA_BASE;
+    const size = Math.min(raw.bankSize, SHEET_BYTES);
+    if (off < 0 || off + size > rom.mainData.length) {
+        return { sheet0: tex.subarray(0, SHEET_BYTES), sheet1: tex.subarray(SHEET_BYTES), pages: 0 };
+    }
+
+    const bank = rom.mainData.subarray(off, off + size);
+    tex.set(bank, SHEET0);
+    tex.set(bank, SHEET1);
+    return { sheet0: tex.subarray(0, SHEET_BYTES), sheet1: tex.subarray(SHEET_BYTES), pages: 1 };
+}
+
+/*
  * Texture RAM for a game that keeps it raw: the boot bank on sheet 0, the set's
  * bank on sheet 1, the set's patches over sheet 0. The two banks' mip
  * rectangles are complementary, so each sheet's mip half is half one bank and
@@ -984,9 +1017,11 @@ export function programTextureSets(rom, index, decoded) {
  */
 export function buildTexram(rom, texSets) {
     if (rom.game.texture.raw) {
-        return rom.game.texture.raw.layout === 'daytona'
-            ? buildDaytonaTexram(rom, texSets)
-            : buildRawTexram(rom, texSets);
+        switch (rom.game.texture.raw.layout) {
+        case 'daytona': return buildDaytonaTexram(rom, texSets);
+        case 'doa': return buildDoaTexram(rom, texSets);
+        default: return buildRawTexram(rom, texSets);
+        }
     }
     const md = rom.mainData;
     const dv = rom.mainDataView;

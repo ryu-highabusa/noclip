@@ -342,6 +342,14 @@
       <div class="field">
         <input type="search" id="model-search" placeholder="Model index or range (e.g. 500-520)">
       </div>
+      <!-- A profile may divide a large anonymous model table into researched
+           families. Hidden for games that do not provide that catalog. -->
+      <div class="field" id="model-catalog-field" hidden>
+        <label>Model group</label>
+        <select id="model-catalog-group"></select>
+        <label>Bank</label>
+        <select id="model-catalog-bank"></select>
+      </div>
       <div class="field row">
         <label class="check"><input type="checkbox" id="model-only-mesh" checked> only models with geometry</label>
       </div>

@@ -2,7 +2,7 @@
  * app.js — entry point: ROM acquisition, the three view modes and the UI wiring.
  */
 
-import { loadRomSet, readModelEntry, readModelName, setRomPatches } from './romset.js';
+import { loadRomSet, readModelEntry, readModelBounds, readModelName, setRomPatches } from './romset.js';
 import { GAMES } from './games.js';
 import { wireReportButtons } from './report.js';
 import { readViewLink, applyLinkControls, describeViewLink } from './viewlink.js';
@@ -3403,14 +3403,21 @@ function renderModelList() {
     const q = $('#model-search').value.trim();
     const onlyMesh = $('#model-only-mesh').checked;
 
-    let lo = 0, hi = modelCount() - 1;
+    const ranges = state.rom.game.modelCatalog?.ranges ?? [];
+    const picked = ranges[Number($('#model-catalog-group').value)] ?? null;
+    let lo = picked?.first ?? 0, hi = picked?.last ?? modelCount() - 1;
+    const pickedBank = Number($('#model-catalog-bank').value);
+    if (picked?.stride && pickedBank >= 0) {
+        lo = picked.first + pickedBank * picked.stride;
+        hi = Math.min(picked.last, lo + picked.stride - 1);
+    }
     const range = q.match(/^(\d+)\s*-\s*(\d+)$/);
     const single = q.match(/^(\d+)$/);
     if (range) { lo = +range[1]; hi = +range[2]; }
     else if (single) { lo = Math.max(0, +single[1] - 8); hi = +single[1] + 60; }
     lo = Math.max(0, lo); hi = Math.min(modelCount() - 1, hi);
     /* Anything else is a name to look for, in a game whose models have them. */
-    const named = !!state.rom.game.modelNames;
+    const named = !!(state.rom.game.modelNames || state.rom.game.modelCatalog?.entries);
     const needle = named && !range && !single && q ? q.toLowerCase() : null;
 
     const rows = [];
@@ -3419,7 +3426,8 @@ function renderModelList() {
         if (needle && !(readModelName(state.rom, i) ?? '').toLowerCase().includes(needle)) continue;
         rows.push(i);
     }
-    $('#model-count').textContent = `${rows.length} shown of ${modelCount()} table entries`;
+    const scope = picked ? `${hi - lo + 1} in this group/bank` : `${modelCount()} table entries`;
+    $('#model-count').textContent = `${rows.length} shown of ${scope}`;
 
     list.innerHTML = '';
     const frag = document.createDocumentFragment();
@@ -3435,6 +3443,66 @@ function renderModelList() {
 
     /* An exact index in the box selects it outright. */
     if (single && rows.includes(+single[1])) selectModel(+single[1]);
+}
+
+/* Profiles with a researched model catalog get navigation for it. Games that
+ * do not provide one keep the Models panel exactly as it was. The table order
+ * is preserved here; a profile may include visible index prefixes when that
+ * order is itself useful research information. */
+function renderModelCatalogPicker() {
+    const field = $('#model-catalog-field');
+    const group = $('#model-catalog-group');
+    const ranges = state.rom.game.modelCatalog?.ranges ?? [];
+    field.hidden = ranges.length === 0;
+    group.innerHTML = '';
+    group.add(new Option('All models', '-1'));
+
+    if (ranges.length) {
+        const addGroup = (label, entries) => {
+            const optgroup = document.createElement('optgroup');
+            optgroup.label = label;
+            for (const [index, range] of entries) {
+                const count = range.stride
+                    ? Math.floor((range.last - range.first + 1) / range.stride)
+                    : null;
+                const suffix = count == null ? '' : ` (${count} banks)`;
+                optgroup.appendChild(new Option(`${range.name}${suffix}`, String(index)));
+            }
+            group.appendChild(optgroup);
+        };
+        const indexed = ranges.map((range, index) => [index, range]);
+        addGroup('Characters', indexed.filter(([, range]) => range.stride));
+        addGroup('Resources', indexed.filter(([, range]) => !range.stride));
+    }
+
+    group.value = '-1';
+    renderModelCatalogBanks();
+}
+
+function renderModelCatalogBanks() {
+    const bank = $('#model-catalog-bank');
+    const ranges = state.rom?.game.modelCatalog?.ranges ?? [];
+    const range = ranges[Number($('#model-catalog-group').value)] ?? null;
+    bank.innerHTML = '';
+    bank.add(new Option('All banks', '-1'));
+    if (!range?.stride) {
+        bank.disabled = true;
+        return;
+    }
+
+    bank.disabled = false;
+    const count = Math.floor((range.last - range.first + 1) / range.stride);
+    for (let i = 0; i < count; i++) bank.add(new Option(`Bank ${i}`, String(i)));
+}
+
+function selectModelCatalogScope() {
+    $('#model-search').value = '';
+    renderModelList();
+    const ranges = state.rom.game.modelCatalog?.ranges ?? [];
+    const range = ranges[Number($('#model-catalog-group').value)] ?? null;
+    if (!range) return;
+    const bank = Math.max(0, Number($('#model-catalog-bank').value));
+    selectModel(range.first + bank * (range.stride ?? 0) + (range.bodyOffset ?? 0));
 }
 
 /* Decoding 4400 meshes eagerly would stall the UI, so face counts fill in as
@@ -3463,11 +3531,17 @@ function selectModel(idx) {
 function renderModelInfo(idx, d) {
     const entry = readModelEntry(state.rom, idx);
     const name = readModelName(state.rom, idx);
+    const stored = readModelBounds(state.rom, idx);
+    const n = (v) => Number(v).toFixed(4).replace(/\.?0+$/, '');
+    const vec = (v) => `(${v.map(n).join(', ')})`;
+    const bounds = stored
+        ? `<br><span class="mono">ROM bounds min ${vec(stored.min)} · max ${vec(stored.max)} · origin radius ${n(stored.radius)}</span>`
+        : '';
     $('#model-info').innerHTML = d
         ? `<b>model ${idx}</b>${name ? ` <span class="mono">${name}</span>` : ''} — ${d.faceCount} faces · ${d.positions.length / 9} tris ·
            ${d.vertexPairs} vertex pairs · ${d.texturedFaces} textured<br>
            <span class="mono">mesh ${entry.meshPtr} · mat ${entry.matPtr} · uv ${entry.uvPtr}</span><br>
-           <span class="mono">${describeModelScene(idx)}</span>`
+           <span class="mono">${describeModelScene(idx)}</span>${bounds}`
         : `<b>model ${idx}</b> — no geometry at this table entry`;
 }
 
@@ -4244,6 +4318,11 @@ function wireOptions() {
     });
     $('#model-search').addEventListener('input', renderModelList);
     $('#model-only-mesh').addEventListener('change', renderModelList);
+    $('#model-catalog-group').addEventListener('change', () => {
+        renderModelCatalogBanks();
+        selectModelCatalogScope();
+    });
+    $('#model-catalog-bank').addEventListener('change', selectModelCatalogScope);
 
     $('#char-select').addEventListener('change', (e) =>
         loadCharacter(+e.target.value, { keepMotion: true }));
@@ -4432,7 +4511,7 @@ function renderTextureSetPicker() {
     for (let s = 0; s < state.rom.game.texture.sets; s++) {
         const o = el('option');
         o.value = String(s);
-        o.textContent = `set ${s}`;
+        o.textContent = state.rom.game.texture.setNames?.[s] ?? `set ${s}`;
         sel.appendChild(o);
     }
     sel.value = 'auto';
@@ -4698,7 +4777,10 @@ function loadGameContent() {
     /* The texture picker is for models no stage draws — see useModelScene. A
      * game whose stages carry every set between them does not need it. */
     if (modelsPickTextures()) renderTextureSetPicker();
-    if (state.rom.game.modelNames) $('#model-search').placeholder = 'Model index, range (500-520) or name';
+    if (state.rom.game.modelNames || state.rom.game.modelCatalog?.entries) {
+        $('#model-search').placeholder = 'Model index, range (500-520) or name';
+    }
+    renderModelCatalogPicker();
     if (on.anim) renderCharacterSelect();
     if (on.cell) {
         const under = $('#cell-under');

@@ -11,7 +11,9 @@ views below are its. *Fighting Vipers* has stages and models — see
 the original Model 2 board, has its models, its courses and the animated
 trackside objects in all eight of the builds it shipped as — see
 [Daytona USA](#daytona-usa). *Virtua Cop*, on the same board, has its three
-stages and its models — see [Virtua Cop](#virtua-cop).
+stages and its models — see [Virtua Cop](#virtua-cop). *Dead or Alive* has a
+first research view of its models and raw texture banks — see
+[Dead or Alive](#dead-or-alive).
 
 Three views, and a fourth for the 2D art:
 
@@ -131,6 +133,22 @@ it is not written yet.
 What else is missing: the character rigs and the motion tables, so there is no
 Animation tab; and the stage names, so an arena is shown by the `stage_NUM` in
 its own record until someone identifies it.
+
+## Dead or Alive
+
+Drop the Model 2B revision-C `doa.zip` and the explorer opens its Models tab.
+The program's table contains 19,330 entries. A research catalog groups those
+entries into costume families and resource ranges, with a second picker for
+the eight repeated banks inside each character family; the bracketed numbers
+shown in that picker are catalog positions, not stage IDs.
+
+The texture picker exposes the thirteen raw banks named by the program-ROM
+directory at `0xCE8D0`. Each is an already-expanded `0xC0000`-byte source in
+main data. The current view mirrors the selected bank onto both sheets, which
+is useful for identifying which bank owns a model but is not yet a complete
+reconstruction of an in-game scene: captures show that the game can replace a
+middle portion of one sheet with a fighter overlay. Stage assembly, character
+rigs and motions remain future work.
 
 ## Daytona USA
 
