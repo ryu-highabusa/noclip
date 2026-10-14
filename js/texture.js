@@ -1004,6 +1004,16 @@ export function programTextureSets(rom, index, decoded) {
     const T = rom.game.texture;
     if (T.raw?.layout === 'doa') {
         const range = rom.game.modelCatalog?.ranges.find((r) => index >= r.first && index <= r.last);
+        /* A stage resource bank is uploaded as the complete source bank. This
+         * is not the same operation as a fighter selector below, even when
+         * both name the same source-directory entry. */
+        if (range?.textureSet != null) {
+            return {
+                sets: [range.textureSet],
+                set: range.textureSet,
+                how: 'doa-stage',
+            };
+        }
         if (range?.character == null || range?.costume == null) return null;
         const at = T.raw.fighterSelectorTable
             + range.costume * T.raw.fighterSelectorStride + range.character;
