@@ -98,6 +98,10 @@ export function collectDiagnostics(state) {
         d.view.model = state.modelIndex;
         d.view.texSetChoice = state.texSetChoice === null ? 'from the model (auto)'
             : state.texSetChoice === -1 ? 'no textures' : state.texSetChoice;
+    } else if (rom && state?.tab === 'texture') {
+        d.view.textureSource = state.textureView.set;
+        d.view.textureSheet = state.textureView.sheet;
+        d.view.textureDisplay = state.textureView.display;
     } else if (rom && state?.tab === 'cell') {
         d.view.cell = state.cell.index;
         d.view.cg = state.cell.under >= 0 ? `${state.cell.under} then ${state.cell.cg}` : state.cell.cg;

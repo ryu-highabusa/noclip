@@ -161,6 +161,30 @@ copies `0x4000` bytes from main-data address `0x02FC0000` into the low bytes of
 16-bit luma RAM entries, and the explorer now performs that exact copy. An
 explicit `lumaram` dump remains accepted and takes precedence.
 
+The **Textures** tab opens Texture RAM independently of any model. It can show
+each ROM source, either 1 MB sheet or both sheets, at fitted or native 1:1
+pixels. Grayscale is the literal 4-bit texel value; transparent-zero and false
+color are inspection aids. This is intentionally not presented as the final
+in-game color: a Model 2 texture stores indices, while the polygon supplies the
+palette color and luma band that turn those indices into RGB through luma RAM
+and colorxlat. The separation makes otherwise-unused art visible without
+wrapping it around an unrelated fighter model.
+
+The source labels also decode the fighter selector's high bit: “lower” is the
+first `0x20000` fighter half and “upper” the second. For example, bank `0x0A`
+is selected by Gen Fu costume 2 in its lower half and Bayman costume 2 in its
+upper half. It is therefore a live character bank even though no stage selects
+it; an individual line-art-looking region inside it may still turn out to be
+unused or diagnostic art.
+
+DOA's color reconstruction is now generated from the ROM as well. The fixed
+32-row curve is followed by the same three uploads as `FUN_0005D7C0`: five odd
+rows for P1, five for P2 and five for the stage, selected through the pointer
+tables at program offsets `0x7A810` and `0x7A890`. Together with the luma upload
+above, this reproduces two independent `0xC000` colorxlat captures byte for
+byte. A dropped capture is still accepted and takes precedence, but it is no
+longer required for DOA's normal model colors.
+
 ## Daytona USA
 
 Drop a Daytona set and the explorer loads it with the Models tab. All eight of

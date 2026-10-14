@@ -86,6 +86,12 @@ const state = {
     /* The Cells tab: which cell, the CG drawn with it and the one loaded
      * first (-1 for none), and each cell's CGs, ranked once a set is up. */
     cell: { index: 1, cg: -1, under: -1, ranks: null },
+    /* Texture RAM browser. `set` is a ROM source/upload set rather than a
+     * model-table group; `sheet` chooses either 1 MB sheet or both stacked. */
+    textureView: {
+        set: 0, sheet: 'both', display: 'gray', fit: true,
+        atlas: null, y0: 0, cache: new Map(),
+    },
     charIndex: 0,
     character: null,
     /* A game whose enemies are jointed bodies rather than a fighter roster —
@@ -338,6 +344,7 @@ function resetRomState() {
     state.stages = [];
     state.modelCache.clear();
     state.texSetCache.clear();
+    state.textureView.cache.clear();
     clearSkyPanoramas();
     state.modelScenes = null;
     state.rigOwners = null;
@@ -1204,6 +1211,18 @@ function modelScenes() {
  * claims. A model belonging to neither gets none, and its part rows stay at the
  * zero a scene with nobody in it leaves them. */
 function modelFighter(idx) {
+    /* DOA has no rig reader yet, but its research catalog already identifies
+     * every character/costume family. The same selector byte that composes
+     * the fighter's texture sheets selects its five colorxlat source rows. */
+    if (state.rom.game.texture.raw?.layout === 'doa') {
+        const T = state.rom.game.texture.raw;
+        const range = state.rom.game.modelCatalog?.ranges.find(
+            (r) => idx >= r.first && idx <= r.last);
+        if (range?.character == null || range?.costume == null) return null;
+        const at = T.fighterSelectorTable
+            + range.costume * T.fighterSelectorStride + range.character;
+        return at >= 0 && at < state.rom.maincpu.length ? state.rom.maincpu[at] : null;
+    }
     modelScenes();
     const owner = state.rigOwners.get(idx);
     if (owner !== undefined) return owner;
@@ -4252,6 +4271,97 @@ function drawCell() {
     updateHud();
 }
 
+/* ---- Texture RAM browser ------------------------------------------------ */
+
+/* Sixteen deliberately distinct colors for inspecting index boundaries. They
+ * are diagnostic colors, not a recovered Model 2 palette. */
+const TEXTURE_INDEX_COLORS = [
+    0x000000, 0x1f77b4, 0xff7f0e, 0x2ca02c,
+    0xd62728, 0x9467bd, 0x8c564b, 0xe377c2,
+    0x7f7f7f, 0xbcbd22, 0x17becf, 0x66c2a5,
+    0xfc8d62, 0x8da0cb, 0xe78ac3, 0xffffff,
+];
+
+function renderTextureBrowser() {
+    const T = state.rom.game.texture;
+    const select = $('#texture-set');
+    select.innerHTML = '';
+    for (let i = 0; i < T.sets; i++) {
+        select.add(new Option(T.setNames?.[i] ?? `Texture set ${i}`, String(i)));
+    }
+    state.textureView.set = Math.min(Math.max(state.textureView.set, 0), Math.max(T.sets - 1, 0));
+    select.value = String(state.textureView.set);
+    $('#texture-sheet').value = state.textureView.sheet;
+    $('#texture-display').value = state.textureView.display;
+    $('#texture-fit').checked = state.textureView.fit;
+    $('#texture-view').classList.toggle('fit', state.textureView.fit);
+}
+
+function textureSourceDescription(set) {
+    const raw = state.rom.game.texture.raw;
+    if (!raw?.bankTable) return '';
+    const table = raw.bankTable + set * 4;
+    const view = raw.bankTable >= 0x02000000 ? state.rom.mainDataView : state.rom.mainCpuView;
+    const at = raw.bankTable >= 0x02000000 ? table - 0x02000000 : table;
+    if (at < 0 || at + 4 > view.byteLength) return '';
+    const ptr = view.getUint32(at, true);
+    return ptr ? ` · source 0x${ptr.toString(16).padStart(8, '0').toUpperCase()}` : '';
+}
+
+function drawTextureBrowser() {
+    const tv = state.textureView;
+    const set = tv.set;
+    let built = tv.cache.get(set);
+    if (!built) {
+        const { sheet0, sheet1, pages } = buildTexram(state.rom, texramQueue([set]));
+        built = { atlas: buildAtlas(sheet0, sheet1), pages };
+        tv.cache.set(set, built);
+    }
+    const { atlas, pages } = built;
+    const y0 = tv.sheet === '1' ? ATLAS_H / 2 : 0;
+    const height = tv.sheet === 'both' ? ATLAS_H : ATLAS_H / 2;
+    const rgba = new Uint8ClampedArray(ATLAS_W * height * 4);
+    let nonzero = 0;
+    const used = new Set();
+    tv.atlas = atlas;
+    tv.y0 = y0;
+
+    for (let y = 0; y < height; y++) {
+        const srcRow = (y0 + y) * ATLAS_W;
+        const dstRow = y * ATLAS_W * 4;
+        for (let x = 0; x < ATLAS_W; x++) {
+            const index = Math.round(atlas[srcRow + x] / 17);
+            const d = dstRow + x * 4;
+            if (index) nonzero++;
+            used.add(index);
+            if (tv.display === 'false') {
+                const rgb = TEXTURE_INDEX_COLORS[index];
+                rgba[d] = rgb >> 16;
+                rgba[d + 1] = (rgb >> 8) & 0xff;
+                rgba[d + 2] = rgb & 0xff;
+            } else {
+                const v = index * 17;
+                rgba[d] = rgba[d + 1] = rgba[d + 2] = v;
+            }
+            rgba[d + 3] = tv.display === 'zero' && index === 0 ? 0 : 255;
+        }
+    }
+
+    const canvas = $('#texture-canvas');
+    canvas.width = ATLAS_W;
+    canvas.height = height;
+    canvas.getContext('2d').putImageData(new ImageData(rgba, ATLAS_W, height), 0, 0);
+    $('#texture-view').classList.toggle('fit', tv.fit);
+
+    const label = state.rom.game.texture.setNames?.[set] ?? `Texture set ${set}`;
+    const pct = (nonzero * 100 / (ATLAS_W * height)).toFixed(1);
+    $('#texture-info').innerHTML = `<b>${label}</b><br>${ATLAS_W}&times;${height} raw 4-bit texels`
+        + ` · ${used.size} of 16 indices present · ${pct}% non-zero`
+        + textureSourceDescription(set)
+        + (Number.isFinite(pages) ? ` · ${pages} upload${pages === 1 ? '' : 's'}` : '');
+    updateHud();
+}
+
 /* ---- HUD / options ------------------------------------------------------- */
 
 function updateHud() {
@@ -4262,6 +4372,11 @@ function updateHud() {
         label = `<b>${st?.name ?? ''}</b> · stage slot ${state.stageIndex}`;
     } else if (state.tab === 'model') {
         label = `<b>model ${state.modelIndex}</b>`;
+    } else if (state.tab === 'texture') {
+        $('#hud').innerHTML = `<b>texture source ${state.textureView.set.toString(16).toUpperCase().padStart(2, '0')}</b>`
+            + ` · ${state.textureView.sheet === 'both' ? 'both sheets' : `sheet ${state.textureView.sheet}`}`
+            + ' · raw 4-bit indices';
+        return;
     } else if (state.tab === 'cell') {
         /* No camera: the picture is flat. */
         const c = state.cell;
@@ -4343,6 +4458,7 @@ function wirePicking() {
 function reloadView({ keepCamera }) {
     if (state.tab === 'stage') loadStage(state.stageIndex, { keepCamera });
     else if (state.tab === 'model') loadModel(state.modelIndex, { keepCamera });
+    else if (state.tab === 'texture') drawTextureBrowser();
     else if (state.tab === 'cell') drawCell();
     else rebuildRig({ keepCamera });
 }
@@ -4352,8 +4468,10 @@ function switchTab(tab) {
     for (const b of $('#tabs').children) b.classList.toggle('active', b.dataset.tab === tab);
     for (const p of document.querySelectorAll('.tabpanel')) p.hidden = p.dataset.tab !== tab;
     $('#cell-view').hidden = tab !== 'cell';
+    $('#texture-view').hidden = tab !== 'texture';
     if (tab === 'stage') loadStage(state.stageIndex);
     else if (tab === 'model') loadModel(state.modelIndex);
+    else if (tab === 'texture') drawTextureBrowser();
     else if (tab === 'cell') selectCell(state.cell.index, { cg: state.cell.cg });
     else loadCharacter(state.charIndex, { keepMotion: true });
     updateHud();
@@ -4382,6 +4500,40 @@ function wireOptions() {
     $('#cell-cg').addEventListener('change', (e) => { state.cell.cg = +e.target.value; drawCell(); });
     $('#cell-under').addEventListener('change', (e) => { state.cell.under = +e.target.value; drawCell(); });
     $('#cell-fit').addEventListener('change', () => drawCell());
+    $('#texture-set').addEventListener('change', (e) => {
+        state.textureView.set = +e.target.value;
+        drawTextureBrowser();
+    });
+    $('#texture-sheet').addEventListener('change', (e) => {
+        state.textureView.sheet = e.target.value;
+        drawTextureBrowser();
+    });
+    $('#texture-display').addEventListener('change', (e) => {
+        state.textureView.display = e.target.value;
+        drawTextureBrowser();
+    });
+    $('#texture-fit').addEventListener('change', (e) => {
+        state.textureView.fit = e.target.checked;
+        $('#texture-view').classList.toggle('fit', state.textureView.fit);
+    });
+    $('#texture-canvas').addEventListener('pointermove', (e) => {
+        const canvas = e.currentTarget;
+        const r = canvas.getBoundingClientRect();
+        const x = Math.min(canvas.width - 1, Math.max(0,
+            Math.floor((e.clientX - r.left) * canvas.width / r.width)));
+        const y = Math.min(canvas.height - 1, Math.max(0,
+            Math.floor((e.clientY - r.top) * canvas.height / r.height)));
+        const atlasY = state.textureView.y0 + y;
+        const sheet = atlasY >= ATLAS_H / 2 ? 1 : 0;
+        const sheetY = atlasY % (ATLAS_H / 2);
+        const value = Math.round((state.textureView.atlas?.[atlasY * ATLAS_W + x] ?? 0) / 17);
+        $('#texture-cursor').textContent = `sheet ${sheet} · x 0x${x.toString(16).toUpperCase().padStart(3, '0')}`
+            + ` · y 0x${sheetY.toString(16).toUpperCase().padStart(3, '0')}`
+            + ` · 32px tile (${x >> 5}, ${sheetY >> 5}) · index 0x${value.toString(16).toUpperCase()}`;
+    });
+    $('#texture-canvas').addEventListener('pointerleave', () => {
+        $('#texture-cursor').textContent = 'Move over the image for texel coordinates.';
+    });
     $('#opt-music').addEventListener('change', (e) => setMusic(e.target.checked));
     $('#music-volume').addEventListener('input', (e) => state.music.board?.setVolume(+e.target.value));
     $('#opt-stage-sfx').addEventListener('change', () => {
@@ -4561,6 +4713,7 @@ function wireOptions() {
     $('#opt-fix-errors').addEventListener('change', (e) => {
         useRomFixes(e.target.checked);
         state.modelCache.clear();
+        state.textureView.cache.clear();
         reloadView({ keepCamera: true });
     });
 
@@ -4781,8 +4934,8 @@ function applyGameFeatures() {
     const f = state.rom.game.features;
     $('#game-title').textContent = state.rom.game.name;
     document.title = `${state.rom.game.name} — 3D Explorer`;
-    const on = { stage: f.stages, model: true, anim: (f.characters && f.motions) || Boolean(f.bodies),
-        cell: Boolean(f.cells) };
+    const on = { stage: f.stages, model: true, texture: Boolean(state.rom.game.texture),
+        anim: (f.characters && f.motions) || Boolean(f.bodies), cell: Boolean(f.cells) };
     /* The panel's controls are the roster's. A game of jointed bodies keeps the
      * ones that mean something for it, under names for what it has. */
     const bodies = Boolean(f.bodies);
@@ -4890,6 +5043,7 @@ function loadGameContent() {
     /* The texture picker is for models no stage draws — see useModelScene. A
      * game whose stages carry every set between them does not need it. */
     if (modelsPickTextures()) renderTextureSetPicker();
+    if (on.texture) renderTextureBrowser();
     if (state.rom.game.modelNames || state.rom.game.modelCatalog?.entries
             || state.rom.game.modelCatalog?.ranges?.length) {
         $('#model-search').placeholder = 'Model index, range (500-520) or name';
@@ -5050,8 +5204,9 @@ function start() {
         /* Not behind `animate`: a billboard turns with the camera, and the
          * camera moves whether the stage is running or held. */
         if (state.tab === 'stage') { stepBillboards(); stepSky(); stepBlockWindow(); renderEggLabFootage(); }
-        /* The Cells tab's picture covers the view, and is drawn when it changes. */
-        if (state.tab !== 'cell') state.viewer.render();
+        /* The two flat browsers cover the 3D view and redraw only when their
+         * selected data changes. */
+        if (state.tab !== 'cell' && state.tab !== 'texture') state.viewer.render();
         if ((frames & 7) === 0 && state.tab === 'stage') updateSkyEye();
         if ((frames++ & 15) === 0) {
             const s = state.viewer.stats;

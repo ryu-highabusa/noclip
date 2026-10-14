@@ -3112,10 +3112,18 @@ const doa = {
     paletteCount: 0x01e4,
 
     /* FUN_000010D0 copies exactly 0x4000 bytes from address 0x02FC0000 to
-     * the low byte of consecutive 16-bit entries at LUMA RAM 0x11400000.
-     * This reproduces doalumaram.bin byte-for-byte; DOA's base colorxlat
-     * initializer remains separate and is not claimed here. */
+     * the low byte of consecutive 16-bit entries at LUMA RAM 0x11400000. */
     luma: { source: 'mainData', data: 0x00fc0000, bytes: 0x4000 },
+
+    /* The fixed 32-row curve plus FUN_0005D7C0's P1/P2/stage replacements.
+     * Texture-source order is not stage-id order, hence the explicit map. */
+    colors: {
+        doa: {
+            fighterSources: 0x0007a810,
+            stageSources: 0x0007a890,
+            stageForTextureSet: [0, 1, 2, 3, 4, 8, 11, 6, 10, null, null, null, 5],
+        },
+    },
 
     texture: {
         raw: {
@@ -3136,19 +3144,19 @@ const doa = {
         pickerLabel: 'Texture source / upload mode',
         autoLabel: 'Auto — use fighter selector or stage source',
         setNames: [
-            'Full bank 00 (research) — stage 0x0 Freeway',
-            'Full bank 01 (research) — stage 0x1 Burai Zhen',
-            'Full bank 02 (research) — stage 0x2 Hangar',
-            "Full bank 03 (research) — stage 0x3 L's Castle",
-            'Full bank 04 (research) — stage 0x4 Danger Zone',
-            'Full bank 05 (research) — stage 0x8 Forest',
-            'Full bank 06 (research) — stage 0xB Beach',
-            'Full bank 07 (research) — stage 0x6 Name Entry / solid screens',
-            'Full bank 08 (research) — stage 0xA Construction',
-            'Full bank 09 (research) — no known stage',
-            'Full bank 0A (research) — no known stage',
-            'Full bank 0B (research) — no known stage',
-            'Full bank 0C (research) — stage 0x5 DOATEC',
+            'Bank 00 — Zack C0 lower / Zack C1 upper · stage 0x0 Freeway',
+            'Bank 01 — Tina C0 lower / Tina C1 upper · stage 0x1 Burai Zhen',
+            'Bank 02 — Jann Lee C2 lower / Jann Lee C0 upper · stage 0x2 Hangar',
+            "Bank 03 — Tina C2 lower / Kasumi C2 upper · stage 0x3 L's Castle",
+            'Bank 04 — Ryu C0 lower / Ryu C1 upper · stage 0x4 Danger Zone',
+            'Bank 05 — Kasumi C0 lower / Kasumi C1 upper · stage 0x8 Forest',
+            'Bank 06 — Gen Fu C1 lower / Gen Fu C0 upper · stage 0xB Beach',
+            'Bank 07 — Lei Fang C2 lower / Zack C2 upper · stage 0x6 Name Entry',
+            'Bank 08 — Bayman C1 lower / Bayman C0 upper · stage 0xA Construction',
+            'Bank 09 — Jann Lee C1 lower / Ryu C2 upper · no stage',
+            'Bank 0A — Gen Fu C2 lower / Bayman C2 upper · no stage',
+            'Bank 0B — Raidou C0 lower / Raidou C1 upper · no stage',
+            'Bank 0C — Lei Fang C1 lower / Lei Fang C0 upper · stage 0x5 DOATEC',
         ],
     },
     features: { stages: false, characters: false, motions: false, cells: false },
