@@ -142,13 +142,15 @@ entries into costume families and resource ranges, with a second picker for
 the eight repeated banks inside each character family; the bracketed numbers
 shown in that picker are catalog positions, not stage IDs.
 
-The texture picker exposes the thirteen raw banks named by the program-ROM
-directory at `0xCE8D0`. Each is an already-expanded `0xC0000`-byte source in
-main data. The current view mirrors the selected bank onto both sheets, which
-is useful for identifying which bank owns a model but is not yet a complete
-reconstruction of an in-game scene: captures show that the game can replace a
-middle portion of one sheet with a fighter overlay. Stage assembly, character
-rigs and motions remain future work.
+Models open with **No textures**, which keeps the readable flat material
+colours. **From the model (auto)** reads the game's 3-by-13 costume/character
+selector table at program offset `0xC6E70`, resolves its source through the
+directory at `0xCE8D0`, and composes the two fighter regions the same way as
+the upload routine. The remaining choices expose all thirteen raw `0xC0000`
+source banks directly and deliberately mirror the selected bank onto both
+sheets; that research view is useful for identifying data and for intentional
+texture swapping, but does not represent a complete in-game scene. Stage
+assembly, character rigs and motions remain future work.
 
 ## Daytona USA
 

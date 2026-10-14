@@ -152,8 +152,9 @@ const state = {
     sky: null,
     skyPanoramas: new Map(),
     /* The Models tab's texture picker, for a game with no stage table to name
-     * a texture number. null is "work it out from the model"; a number is the
-     * set the user chose. `texSetCache` memoises the worked-out answer. */
+     * a texture number. null is "work it out from the model", -1 explicitly
+     * disables texture sampling, and a non-negative number is the set the
+     * user chose. `texSetCache` memoises the worked-out answer. */
     texSetChoice: null,
     texSetCache: new Map(),
     /* Whose part and skin colours to fill colorxlat's fighter rows with, for a
@@ -544,6 +545,11 @@ function setAtlasSheets(sheet0, sheet1) {
     u.uUseAtlas.value = 1;
 }
 
+/** Use the model's flat palette/material colour without sampling the atlas. */
+function disableAtlas() {
+    state.viewer.material.uniforms.uUseAtlas.value = 0;
+}
+
 /* The sets to unpack for `texSets`: which set sits behind the named ones is
  * the game's own arrangement, so it comes off the profile; a game with none
  * named just gets what was asked. */
@@ -567,9 +573,15 @@ function useRomTexram(texSets) {
      * with the set asked for — before the pinned and repeat checks, since a
      * dumped sheet says nothing about which palette is in RAM. */
     if (state.rom.game.palette && texSets.length) state.rom.paletteSet = texSets[texSets.length - 1];
-    if (state.texramPinned) return;
+    if (state.texramPinned) {
+        state.viewer.material.uniforms.uUseAtlas.value = 1;
+        return;
+    }
     const key = texSets.join(',');
-    if (key === state.texramKey) return;
+    if (key === state.texramKey) {
+        state.viewer.material.uniforms.uUseAtlas.value = 1;
+        return;
+    }
 
     const { sheet0, sheet1 } = buildTexram(state.rom, texramQueue(texSets));
     setAtlasSheets(sheet0, sheet1);
@@ -813,6 +825,9 @@ function modelsPickTextures() {
  * See programTextureSets and bankTextureSet for the first five.
  */
 function modelTextureGuess(idx) {
+    if (state.texSetChoice === -1) {
+        return { sets: [], set: null, how: 'none' };
+    }
     if (state.texSetChoice !== null) {
         return { sets: [state.texSetChoice], set: state.texSetChoice, how: 'chosen' };
     }
@@ -839,7 +854,7 @@ function workOutTextureSets(idx) {
          * under any set, so it stands on the one the game opens on. */
         const sets = derived.sets.length ? derived.sets : fallback == null ? [] : [fallback];
         /* A fighter's pair stands for itself by its first set. */
-        const set = derived.how === 'fighter' ? sets[1] : sets.length ? sets[sets.length - 1] : null;
+        const set = derived.set ?? (derived.how === 'fighter' ? sets[1] : sets.length ? sets[sets.length - 1] : null);
         return { ...derived, sets, set };
     }
 
@@ -886,6 +901,12 @@ function residentCombos() {
 function describeTextureGuess(g) {
     const sets = g.sets?.length ? `set${g.sets.length > 1 ? 's' : ''} ${g.sets.join(', ')}` : '';
     switch (g.how) {
+    case 'none': return 'textures disabled';
+    case 'doa-fighter': {
+        const bank = g.selector & 0x7f;
+        const half = g.selector & 0x80 ? 'upper' : 'lower';
+        return `fighter source bank ${bank.toString(16).toUpperCase().padStart(2, '0')}, ${half} half`;
+    }
     case 'untextured': return 'samples no texture';
     case 'fighter': return `${sets}: a fighter's part, on its pair and the boot set`;
     case 'boot': return state.rom.game.texture.raw
@@ -1243,12 +1264,16 @@ function useModelScene(idx) {
         if (modelsPickTextures()) {
             const guess = modelTextureGuess(idx);
             set = guess.set;
-            if (guess.sets.length) useRomTexram(guess.sets);
+            if (guess.how === 'none') disableAtlas();
+            else if (guess.sets.length) useRomTexram(guess.sets);
             /* Said on the status line, since the picture alone cannot tell a
              * set the game names from one the viewer picked. */
             const status = $('#tex-status');
             const why = describeTextureGuess(guess);
-            if (status && guess.how === 'untextured') {
+            if (status && guess.how === 'none') {
+                status.textContent = 'textures disabled — flat material colours';
+                status.title = 'Choose Auto or a source bank to enable texture sampling';
+            } else if (status && guess.how === 'untextured') {
                 status.textContent = 'the model samples no texture';
             } else if (status && set != null) {
                 status.textContent = `sheets unpacked from ROM (${why || `set ${set}`})`;
@@ -3403,10 +3428,11 @@ function renderModelList() {
     const q = $('#model-search').value.trim();
     const onlyMesh = $('#model-only-mesh').checked;
 
+    const catalog = modelCatalogControls();
     const ranges = state.rom.game.modelCatalog?.ranges ?? [];
-    const picked = ranges[Number($('#model-catalog-group').value)] ?? null;
+    const picked = ranges[Number(catalog.group.value)] ?? null;
     let lo = picked?.first ?? 0, hi = picked?.last ?? modelCount() - 1;
-    const pickedBank = Number($('#model-catalog-bank').value);
+    const pickedBank = Number(catalog.bank.value);
     if (picked?.stride && pickedBank >= 0) {
         lo = picked.first + pickedBank * picked.stride;
         hi = Math.min(picked.last, lo + picked.stride - 1);
@@ -3445,13 +3471,32 @@ function renderModelList() {
     if (single && rows.includes(+single[1])) selectModel(+single[1]);
 }
 
+/* Keep this feature tolerant of an old cached index.html being served beside a
+ * newer app.js. That is easy to do with a static checkout: the ROM loader page
+ * can stay open while individual source files are replaced underneath it. */
+function modelCatalogControls() {
+    let field = $('#model-catalog-field');
+    if (!field) {
+        field = el('div', 'field',
+            '<label>Model group</label><select id="model-catalog-group"></select>'
+            + '<label>Bank</label><select id="model-catalog-bank"></select>');
+        field.id = 'model-catalog-field';
+        field.hidden = true;
+        $('#model-search').closest('.field').after(field);
+    }
+    return {
+        field,
+        group: field.querySelector('#model-catalog-group'),
+        bank: field.querySelector('#model-catalog-bank'),
+    };
+}
+
 /* Profiles with a researched model catalog get navigation for it. Games that
  * do not provide one keep the Models panel exactly as it was. The table order
  * is preserved here; a profile may include visible index prefixes when that
  * order is itself useful research information. */
 function renderModelCatalogPicker() {
-    const field = $('#model-catalog-field');
-    const group = $('#model-catalog-group');
+    const { field, group } = modelCatalogControls();
     const ranges = state.rom.game.modelCatalog?.ranges ?? [];
     field.hidden = ranges.length === 0;
     group.innerHTML = '';
@@ -3480,9 +3525,9 @@ function renderModelCatalogPicker() {
 }
 
 function renderModelCatalogBanks() {
-    const bank = $('#model-catalog-bank');
+    const { group, bank } = modelCatalogControls();
     const ranges = state.rom?.game.modelCatalog?.ranges ?? [];
-    const range = ranges[Number($('#model-catalog-group').value)] ?? null;
+    const range = ranges[Number(group.value)] ?? null;
     bank.innerHTML = '';
     bank.add(new Option('All banks', '-1'));
     if (!range?.stride) {
@@ -3498,10 +3543,11 @@ function renderModelCatalogBanks() {
 function selectModelCatalogScope() {
     $('#model-search').value = '';
     renderModelList();
+    const { group, bank: bankSelect } = modelCatalogControls();
     const ranges = state.rom.game.modelCatalog?.ranges ?? [];
-    const range = ranges[Number($('#model-catalog-group').value)] ?? null;
+    const range = ranges[Number(group.value)] ?? null;
     if (!range) return;
-    const bank = Math.max(0, Number($('#model-catalog-bank').value));
+    const bank = Math.max(0, Number(bankSelect.value));
     selectModel(range.first + bank * (range.stride ?? 0) + (range.bodyOffset ?? 0));
 }
 
@@ -4318,11 +4364,12 @@ function wireOptions() {
     });
     $('#model-search').addEventListener('input', renderModelList);
     $('#model-only-mesh').addEventListener('change', renderModelList);
-    $('#model-catalog-group').addEventListener('change', () => {
+    const catalog = modelCatalogControls();
+    catalog.group.addEventListener('change', () => {
         renderModelCatalogBanks();
         selectModelCatalogScope();
     });
-    $('#model-catalog-bank').addEventListener('change', selectModelCatalogScope);
+    catalog.bank.addEventListener('change', selectModelCatalogScope);
 
     $('#char-select').addEventListener('change', (e) =>
         loadCharacter(+e.target.value, { keepMotion: true }));
@@ -4500,10 +4547,15 @@ function wireOptions() {
 
 /* The Models tab's texture picker. Shown only when no stage record is going to
  * name a texture number, which is the same condition that hides the Stages tab.
- * "From the model" is the default and is what the auto search does. */
+ * "From the model" asks the program-derived tables; "No textures" keeps the
+ * flat material colours and can be the profile's safer opening choice. */
 function renderTextureSetPicker() {
     const sel = $('#model-texset');
     sel.innerHTML = '';
+    const none = el('option');
+    none.value = 'none';
+    none.textContent = 'No textures';
+    sel.appendChild(none);
     const auto = el('option');
     auto.value = 'auto';
     auto.textContent = 'From the model (auto)';
@@ -4514,10 +4566,12 @@ function renderTextureSetPicker() {
         o.textContent = state.rom.game.texture.setNames?.[s] ?? `set ${s}`;
         sel.appendChild(o);
     }
-    sel.value = 'auto';
+    const initial = state.rom.game.texture.defaultChoice === 'none' ? 'none' : 'auto';
+    sel.value = initial;
+    state.texSetChoice = initial === 'none' ? -1 : null;
     /* Assigned, not added: this runs again for every build loaded. */
     sel.onchange = () => {
-        state.texSetChoice = sel.value === 'auto' ? null : Number(sel.value);
+        state.texSetChoice = sel.value === 'none' ? -1 : sel.value === 'auto' ? null : Number(sel.value);
         /* The sheets are keyed on the set, so a change has to invalidate that
          * key or the rebuild is skipped as a repeat. */
         state.texramKey = null;

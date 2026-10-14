@@ -96,7 +96,8 @@ export function collectDiagnostics(state) {
             .filter(([, on]) => !on).map(([k]) => k).join(', ') || 'all on';
     } else if (rom && state?.tab === 'model') {
         d.view.model = state.modelIndex;
-        d.view.texSetChoice = state.texSetChoice === null ? 'from the model (auto)' : state.texSetChoice;
+        d.view.texSetChoice = state.texSetChoice === null ? 'from the model (auto)'
+            : state.texSetChoice === -1 ? 'no textures' : state.texSetChoice;
     } else if (rom && state?.tab === 'cell') {
         d.view.cell = state.cell.index;
         d.view.cg = state.cell.under >= 0 ? `${state.cell.under} then ${state.cell.cg}` : state.cell.cg;

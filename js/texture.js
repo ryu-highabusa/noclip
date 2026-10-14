@@ -810,19 +810,48 @@ function buildDaytonaTexram(rom, texSets) {
 }
 
 /*
- * Dead or Alive keeps thirteen already-expanded 0xC0000-byte banks in
- * main_data. Its program-ROM directory contains absolute main-data pointers.
- * Captured sheets contain a direct copy of a bank followed by 0x40000 zeroes;
- * some runtime scenes replace a middle portion of one sheet with another bank.
- * Until that overlay selection is understood, mirror the chosen complete bank
- * to both sheets. This makes the ROM banks inspectable without pretending that
- * the result is an exact reconstruction of every in-game scene.
+ * Dead or Alive keeps thirteen already-expanded 0xC0000-byte source banks in
+ * main_data. FUN_0007CC50 composes a sheet from three independently selected
+ * regions: fighter slot 0 at 0x00000/0x80000, fighter slot 1 at
+ * 0x20000/0xA0000, and stage data at 0x40000. A fighter selector's low seven
+ * bits index the source directory and bit 7 chooses its other 0x20000 half.
+ *
+ * A value at or above `fighterCompositeBase` is the Models-tab Auto request:
+ * put that fighter in both player slots on both sheets, leaving the unrelated
+ * stage middle clear. A plain 0..12 selection remains the useful research
+ * view that mirrors a complete source bank onto both sheets.
  */
 function buildDoaTexram(rom, texSets) {
     const raw = rom.game.texture.raw;
     const tex = new Uint8Array(SHEET_BYTES * 2);
-    const sets = [].concat(texSets).filter((s) => s >= 0 && s < rom.game.texture.sets);
+    const requested = [].concat(texSets).filter(Number.isFinite);
+    const composite = requested.find((s) => s >= raw.fighterCompositeBase);
+    const sets = requested.filter((s) => s >= 0 && s < rom.game.texture.sets);
     const set = sets.length ? sets[sets.length - 1] : rom.game.texture.defaultSet;
+    if (composite != null) {
+        const selector = composite - raw.fighterCompositeBase;
+        const bankId = selector & 0x7f;
+        const tableEntry = raw.bankTable + bankId * 4;
+        if (tableEntry < 0 || tableEntry + 4 > rom.maincpu.length) {
+            return { sheet0: tex.subarray(0, SHEET_BYTES), sheet1: tex.subarray(SHEET_BYTES), pages: 0 };
+        }
+        const ptr = rom.mainCpuView.getUint32(tableEntry, true);
+        const bankOff = ptr - MAIN_DATA_BASE;
+        if (bankOff < 0 || bankOff + raw.bankSize > rom.mainData.length) {
+            return { sheet0: tex.subarray(0, SHEET_BYTES), sheet1: tex.subarray(SHEET_BYTES), pages: 0 };
+        }
+        const half = selector & 0x80 ? 0x20000 : 0;
+        for (const sheet of [SHEET0, SHEET1]) {
+            for (const dest of [0x00000, 0x20000]) {
+                tex.set(rom.mainData.subarray(bankOff + half, bankOff + half + 0x20000), sheet + dest);
+            }
+            for (const dest of [0x80000, 0xa0000]) {
+                const source = bankOff + 0x80000 + half;
+                tex.set(rom.mainData.subarray(source, source + 0x20000), sheet + dest);
+            }
+        }
+        return { sheet0: tex.subarray(0, SHEET_BYTES), sheet1: tex.subarray(SHEET_BYTES), pages: 1 };
+    }
     if (set == null) return { sheet0: tex.subarray(0, SHEET_BYTES), sheet1: tex.subarray(SHEET_BYTES), pages: 0 };
 
     const tableEntry = raw.bankTable + set * 4;
@@ -973,6 +1002,20 @@ export function fighterSetList(rom) {
  */
 export function programTextureSets(rom, index, decoded) {
     const T = rom.game.texture;
+    if (T.raw?.layout === 'doa') {
+        const range = rom.game.modelCatalog?.ranges.find((r) => index >= r.first && index <= r.last);
+        if (range?.character == null || range?.costume == null) return null;
+        const at = T.raw.fighterSelectorTable
+            + range.costume * T.raw.fighterSelectorStride + range.character;
+        if (at < 0 || at >= rom.maincpu.length) return null;
+        const selector = rom.maincpu[at];
+        return {
+            sets: [T.raw.fighterCompositeBase + selector],
+            set: selector & 0x7f,
+            selector,
+            how: 'doa-fighter',
+        };
+    }
     if (T.raw?.layout === 'daytona') {
         if (!decoded) return null;
         let sheet0 = false, sheet1 = false;
