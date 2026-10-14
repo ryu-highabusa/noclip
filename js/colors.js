@@ -144,12 +144,20 @@ function trim(v, tint) {
  * @returns {Uint8Array} LUMA_BYTES, bytes on even addresses like a dump
  */
 export function buildLumaram(rom) {
+    /* Most profiles keep this beside the rest of their colour builder. DOA's
+     * base colorxlat builder is not understood yet, but its boot-time luma
+     * upload is: FUN_000010D0 copies 0x4000 bytes from main-data 0xFC0000 to
+     * the low byte of successive 16-bit LUMA RAM entries. Keeping that small,
+     * independently proven recipe at game.luma lets a captured colorxlat dump
+     * use the exact ROM luma without pretending the whole pipeline is known. */
+    const spec = rom.game.colors?.luma ?? rom.game.luma;
+    if (!spec) throw new Error('this game has no ROM luma recipe');
     /* Daytona USA keeps both the count and the bands in its program ROM, where
      * the other games keep them in the data ROM — `lda 0x22FD38` and
      * `ld 0x22FD34` in the upload at 0x1314, which are that region's own
      * offsets once the 0x00220000 alias is subtracted. Only the region the two
      * reads come from changes; the two reads do not. */
-    const src = rom.game.colors.luma.source ?? 'mainData';
+    const src = spec.source ?? 'mainData';
     const dv = src === 'maincpu' ? rom.mainCpuView : rom.mainDataView;
     const md = src === 'maincpu' ? rom.maincpu : rom.mainData;
     /* essential_color_handling reads a block count and then that many 128-byte
@@ -158,7 +166,7 @@ export function buildLumaram(rom) {
      * any other, so both games are the same two reads. The House of the Dead
      * states no count: sub_1610 copies a fixed 0x4000 bytes, data
      * 0xC8EB40..0xC92B3F, to the even addresses. */
-    const { count, data, bytes } = rom.game.colors.luma;
+    const { count, data, bytes } = spec;
     const n = Math.min(bytes ?? dv.getUint32(count, true) * LUMA_BAND, LUMA_BYTES / 2);
 
     const luma = new Uint8Array(LUMA_BYTES);
