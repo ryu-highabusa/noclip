@@ -3178,7 +3178,11 @@ const doa = {
         count: 16,
         stageByte: 0x005555de,
         visible: [0x000726b0, 0x00072730],
-        pokes: [[0x0054fcdd, 1]],
+        /* Revision C moved these work-RAM fields relative to Revision B.
+         * The first byte enables the complete stage-detail path; the second
+         * selects variant 2 from the small model tables used by nine stages. */
+        pokes: [[0x0054fcfd, 1], [0x005a7624, 2]],
+        viewVector: 0x005b98a0,
         names: [
             'Freeway', 'Burai Zhen', 'Hangar', "L's Castle",
             'Danger Zone', 'DOATEC', 'Name Entry', 'Beta Burai',

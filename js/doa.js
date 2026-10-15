@@ -347,10 +347,12 @@ export function runStageRoutine(rom, entry, { ram: pokes = [], maxSteps, init, f
     const D = rom.game.doa;
     const ram = new Uint8Array(RAM_SIZE);
     for (const [a, v] of pokes) ram[a - RAM_BASE] = v;
-    /* The view vector the culls dot with (0x71BA0): (1, 1, 1), so that every
-     * piece is in front. */
+    /* The view vector the culls dot with: (1, 1, 1), so that every piece is
+     * in front.  Revision C moved this RAM block by 0x30, so games.js names
+     * the address instead of making the Revision-B address universal. */
     const rv = new DataView(ram.buffer);
-    for (let k = 0; k < 3; k++) rv.setFloat32(VIEW_VECTOR - RAM_BASE + 4 * k, 1, true);
+    const viewVector = D.viewVector ?? VIEW_VECTOR;
+    for (let k = 0; k < 3; k++) rv.setFloat32(viewVector - RAM_BASE + 4 * k, 1, true);
     const unknown = new Set();
     const copro = new Copro(unknown);
     const models = modelTracker({ ...rom.game.modelTable, offset: rom.game.modelTable.offset });
