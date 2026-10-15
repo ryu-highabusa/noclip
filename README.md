@@ -170,12 +170,20 @@ palette color and luma band that turn those indices into RGB through luma RAM
 and colorxlat. The separation makes otherwise-unused art visible without
 wrapping it around an unrelated fighter model.
 
-The source labels also decode the fighter selector's high bit: “lower” is the
-first `0x20000` fighter half and “upper” the second. For example, bank `0x0A`
-is selected by Gen Fu costume 2 in its lower half and Bayman costume 2 in its
-upper half. It is therefore a live character bank even though no stage selects
-it; an individual line-art-looking region inside it may still turn out to be
-unused or diagnostic art.
+The source labels also decode the fighter selector's high bit: **region A** is
+the first `0x20000` fighter region and **region B** the second. For example,
+bank `0x0A` is selected by Gen Fu costume 2 from region A and Bayman costume 2
+from region B. These names describe source-bank layout, not P1 versus P2; the
+game can upload either region into either player's texture slot. Bank `0x0A`
+is therefore live character data even though no stage selects it, while an
+individual line-art-looking area inside it may still be unused or diagnostic.
+
+The eight repeated model banks also include P1- and P2-addressed material
+variants. In the isolated model view, Auto mode mirrors the chosen fighter's
+texture region into both texture slots and its five dynamic colorxlat ramps
+into both player row groups. Without the second upload, P2 variants misleadingly
+appear partly grayscale: skin or cloth that uses dynamic rows loses colour,
+while literal palette colours such as yellow emblems remain intact.
 
 DOA's color reconstruction is now generated from the ROM as well. The fixed
 32-row curve is followed by the same three uploads as `FUN_0005D7C0`: five odd

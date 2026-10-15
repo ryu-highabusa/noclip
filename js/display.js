@@ -2282,6 +2282,7 @@ export function describeOps(ops) {
         if (kind === 'r') return `${Math.round(v)}°`;
         if (kind === 'rx') return `${Math.round(v)}°x`;
         if (kind === 'rz') return `${Math.round(v)}°z`;
+        if (kind === 'm') return 'matrix';
         return `@${v.map((n) => n.toFixed(1)).join(',')}`;
     }).join(' ');
 }

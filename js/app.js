@@ -12,6 +12,7 @@ import { readStageTable, readCourseStages, stageLight, gameLighting } from './st
 import { readPlacementStages, buildPlacementDisplayList } from './placements.js';
 import { readSegmentStages } from './vcop.js';
 import { readVf2Stages } from './vf2.js';
+import { readDoaStages } from './doa.js';
 import { MODES as OBJECT_MODES } from './daytona.js';
 import { coplanarLayers, rankLayers } from './layers.js';
 import { buildSkyPanorama } from './scroll.js';
@@ -634,7 +635,7 @@ function setLumaTables(luma, cxlat) {
  * scene with nobody in it holds.
  *
  * @param {object} stage      the stage whose sets and trim the tables take
- * @param {?number} fighter   the character on screen, as player 1
+ * @param {?number} fighter   the character/texture selector on screen
  */
 function useRomColorLuts(stage, fighter = null) {
     const u = state.viewer.material.uniforms;
@@ -647,10 +648,18 @@ function useRomColorLuts(stage, fighter = null) {
     if (key === state.lutKey) { u.uUseRamp.value = 1; return; }
 
     const luma = buildLumaram(state.rom);
+    /* DOA's repeated fighter-model banks address two separate groups of
+     * colorxlat rows: 1/3/5/7/9 for P1 and 11/13/15/17/19 for P2.  The
+     * isolated model view mirrors one selected fighter into both texture-RAM
+     * slots, so mirror its colour source into both row groups as well.  If we
+     * populate P1 alone, P2-bank models fall back to the boot grey curve while
+     * literal palette colours (emblems, clothing, hair) remain coloured. */
+    const fighters = fighter == null ? []
+        : state.rom.game.colors?.doa ? [fighter, fighter] : [fighter];
     const cxlat = buildColorxlat(state.rom, {
         colorSet: stage.texSet[1],
         tint: stage.tint,
-        fighters: fighter == null ? [] : [fighter],
+        fighters,
     });
     setLumaTables(luma, cxlat);
     state.lutKey = key;
@@ -922,9 +931,9 @@ function describeTextureGuess(g) {
     case 'none': return 'textures disabled';
     case 'doa-fighter': {
         const bank = g.selector & 0x7f;
-        const half = g.selector & 0x80 ? 'upper' : 'lower';
+        const region = g.selector & 0x80 ? 'region B' : 'region A';
         const selector = g.selector.toString(16).toUpperCase().padStart(2, '0');
-        return `fighter selector ${selector}: source bank ${bank.toString(16).toUpperCase().padStart(2, '0')}, ${half} 0x20000 half`;
+        return `fighter selector ${selector}: source bank ${bank.toString(16).toUpperCase().padStart(2, '0')}, ${region}`;
     }
     case 'doa-stage': return `complete stage upload from source bank ${g.set.toString(16).toUpperCase().padStart(2, '0')}`;
     case 'doa-full-bank': return `full source bank ${g.set.toString(16).toUpperCase().padStart(2, '0')} mirrored for research`;
@@ -1046,6 +1055,7 @@ function composeOps(out, ops) {
         else if (kind === 'r') OP_SCRATCH.makeRotationY((v * Math.PI) / 180);
         else if (kind === 'rx') OP_SCRATCH.makeRotationX((v * Math.PI) / 180);
         else if (kind === 'rz') OP_SCRATCH.makeRotationZ((v * Math.PI) / 180);
+        else if (kind === 'm') OP_SCRATCH.set(v[0], v[3], v[6], 0, v[1], v[4], v[7], 0, v[2], v[5], v[8], 0, 0, 0, 0, 1);
         else OP_SCRATCH.makeTranslation(v[0], v[1], v[2]);
         out.multiply(OP_SCRATCH);
     }
@@ -4986,6 +4996,7 @@ function loadGameContent() {
     $('#fix-field').hidden = !state.rom.game.patches?.length;
     useRomFixes($('#opt-fix-errors').checked);
     state.viewer.setDepthProfile(state.rom.game.depth);
+    state.viewer.setMipLevels(state.rom.game.texture.mips !== false);
     state.viewer.material.uniforms.uSolidRamp.value = state.rom.game.colors?.solid ? 1 : 0;
     state.viewer.material.uniforms.uPlaneNormals.value = state.rom.game.lighting?.planeNormals ? 1 : 0;
     const on = applyGameFeatures();
@@ -4998,6 +5009,7 @@ function loadGameContent() {
         if (T.courses) state.stages = readCourseStages(state.rom);
         else if (T.segments) state.stages = readSegmentStages(state.rom);
         else if (T.vf2) state.stages = readVf2Stages(state.rom);
+        else if (T.doa) state.stages = readDoaStages(state.rom);
         else if (T.placements) state.stages = readPlacementStages(state.rom);
         else state.stages = readStageTable(state.rom);
     }

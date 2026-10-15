@@ -3115,6 +3115,14 @@ const doa = {
      * the low byte of consecutive 16-bit entries at LUMA RAM 0x11400000. */
     luma: { source: 'mainData', data: 0x00fc0000, bytes: 0x4000 },
 
+    /* The boot uploads 32 geometry-engine material slots from this program
+     * table.  A fixed light gives the standalone stage view useful shading;
+     * the game's fight camera normally supplies the transformed light. */
+    lighting: {
+        light: [0, -Math.SQRT1_2, -Math.SQRT1_2],
+        materials: { at: 0x000006b0, count: 32 },
+    },
+
     /* The fixed 32-row curve plus FUN_0005D7C0's P1/P2/stage replacements.
      * Texture-source order is not stage-id order, hence the explicit map. */
     colors: {
@@ -3141,25 +3149,61 @@ const doa = {
         residentSet: null,
         defaultSet: 0,
         defaultChoice: 'none',
+        mips: false,
         pickerLabel: 'Texture source / upload mode',
         autoLabel: 'Auto — use fighter selector or stage source',
         setNames: [
-            'Bank 00 — Zack C0 lower / Zack C1 upper · stage 0x0 Freeway',
-            'Bank 01 — Tina C0 lower / Tina C1 upper · stage 0x1 Burai Zhen',
-            'Bank 02 — Jann Lee C2 lower / Jann Lee C0 upper · stage 0x2 Hangar',
-            "Bank 03 — Tina C2 lower / Kasumi C2 upper · stage 0x3 L's Castle",
-            'Bank 04 — Ryu C0 lower / Ryu C1 upper · stage 0x4 Danger Zone',
-            'Bank 05 — Kasumi C0 lower / Kasumi C1 upper · stage 0x8 Forest',
-            'Bank 06 — Gen Fu C1 lower / Gen Fu C0 upper · stage 0xB Beach',
-            'Bank 07 — Lei Fang C2 lower / Zack C2 upper · stage 0x6 Name Entry',
-            'Bank 08 — Bayman C1 lower / Bayman C0 upper · stage 0xA Construction',
-            'Bank 09 — Jann Lee C1 lower / Ryu C2 upper · no stage',
-            'Bank 0A — Gen Fu C2 lower / Bayman C2 upper · no stage',
-            'Bank 0B — Raidou C0 lower / Raidou C1 upper · no stage',
-            'Bank 0C — Lei Fang C1 lower / Lei Fang C0 upper · stage 0x5 DOATEC',
+            'Bank 00 — Zack C0 region A / Zack C1 region B · stage 0x0 Freeway',
+            'Bank 01 — Tina C0 region A / Tina C1 region B · stage 0x1 Burai Zhen',
+            'Bank 02 — Jann Lee C2 region A / Jann Lee C0 region B · stage 0x2 Hangar',
+            "Bank 03 — Tina C2 region A / Kasumi C2 region B · stage 0x3 L's Castle",
+            'Bank 04 — Ryu C0 region A / Ryu C1 region B · stage 0x4 Danger Zone',
+            'Bank 05 — Kasumi C0 region A / Kasumi C1 region B · stage 0x8 Forest',
+            'Bank 06 — Gen Fu C1 region A / Gen Fu C0 region B · stage 0xB Beach',
+            'Bank 07 — Lei Fang C2 region A / Zack C2 region B · stage 0x6 Name Entry',
+            'Bank 08 — Bayman C1 region A / Bayman C0 region B · stage 0xA Construction',
+            'Bank 09 — Jann Lee C1 region A / Ryu C2 region B · no stage',
+            'Bank 0A — Gen Fu C2 region A / Bayman C2 region B · no stage',
+            'Bank 0B — Raidou C0 region A / Raidou C1 region B · no stage',
+            'Bank 0C — Lei Fang C1 region A / Lei Fang C0 region B · stage 0x5 DOATEC',
         ],
     },
-    features: { stages: false, characters: false, motions: false, cells: false },
+
+    /* DOA builds a stage procedurally by running one i960 routine per stage.
+     * These are Revision C program addresses.  The routine and setup tables
+     * are +0xB0 from Revision B; the sky table is +0x3AF0.  All were checked
+     * directly against the Revision C program and its emitted model ranges. */
+    doa: {
+        routines: 0x00071a90,
+        count: 16,
+        stageByte: 0x005555de,
+        visible: [0x000726b0, 0x00072730],
+        pokes: [[0x0054fcdd, 1]],
+        names: [
+            'Freeway', 'Burai Zhen', 'Hangar', "L's Castle",
+            'Danger Zone', 'DOATEC', 'Name Entry', 'Beta Burai',
+            'Forest', 'Beta DOA Floor', 'Construction', 'Beach',
+            'Red Screen', 'Green Screen', 'Blue Screen', 'Black Screen',
+        ],
+        /* Stage ID -> physical texture-source bank.  This is why stage 8
+         * (Forest) uses bank 5 rather than bank 8. */
+        textureSets: [0, 1, 2, 3, 4, 12, 7, 1, 5, 7, 8, 6, 7, 7, 7, 7],
+        sky: {
+            pictures: 0x020c0000,
+            stages: 0x000cb150,
+            skyless: [4, 5, 6, 7, 9, 12, 13, 14, 15],
+        },
+        stageSetup: {
+            common: 0x00070530,
+            table: 0x000704f0,
+            moving: [0, 2, 3, 4, 8, 11],
+            frames: 924,
+            clock: 0x075f,
+        },
+    },
+    stageTable: { doa: true, flat: true },
+    depth: { recede: 0, nearMin: 0.1, layers: true },
+    features: { stages: true, characters: false, motions: false, cells: false },
 };
 
 export const GAMES = [sfight, schamp, fvipers, hotdp, hotdo, hotd,
