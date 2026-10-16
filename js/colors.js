@@ -144,12 +144,20 @@ function trim(v, tint) {
  * @returns {Uint8Array} LUMA_BYTES, bytes on even addresses like a dump
  */
 export function buildLumaram(rom) {
+    /* Most profiles keep this beside the rest of their colour builder. DOA's
+     * base colorxlat builder is not understood yet, but its boot-time luma
+     * upload is: FUN_000010D0 copies 0x4000 bytes from main-data 0xFC0000 to
+     * the low byte of successive 16-bit LUMA RAM entries. Keeping that small,
+     * independently proven recipe at game.luma lets a captured colorxlat dump
+     * use the exact ROM luma without pretending the whole pipeline is known. */
+    const spec = rom.game.colors?.luma ?? rom.game.luma;
+    if (!spec) throw new Error('this game has no ROM luma recipe');
     /* Daytona USA keeps both the count and the bands in its program ROM, where
      * the other games keep them in the data ROM — `lda 0x22FD38` and
      * `ld 0x22FD34` in the upload at 0x1314, which are that region's own
      * offsets once the 0x00220000 alias is subtracted. Only the region the two
      * reads come from changes; the two reads do not. */
-    const src = rom.game.colors.luma.source ?? 'mainData';
+    const src = spec.source ?? 'mainData';
     const dv = src === 'maincpu' ? rom.mainCpuView : rom.mainDataView;
     const md = src === 'maincpu' ? rom.maincpu : rom.mainData;
     /* essential_color_handling reads a block count and then that many 128-byte
@@ -158,7 +166,7 @@ export function buildLumaram(rom) {
      * any other, so both games are the same two reads. The House of the Dead
      * states no count: sub_1610 copies a fixed 0x4000 bytes, data
      * 0xC8EB40..0xC92B3F, to the even addresses. */
-    const { count, data, bytes } = rom.game.colors.luma;
+    const { count, data, bytes } = spec;
     const n = Math.min(bytes ?? dv.getUint32(count, true) * LUMA_BAND, LUMA_BYTES / 2);
 
     const luma = new Uint8Array(LUMA_BYTES);
@@ -395,6 +403,7 @@ function sendFighterColors(dv, put, rgb, C, fighters, palette) {
  * @returns {Uint8Array} CXLAT_BYTES, laid out like a dump of 0x01810000
  */
 export function buildColorxlat(rom, { colorSet = 0, tint = [1, 1, 1], fighters = [] } = {}) {
+    if (rom.game.colors.doa) return buildDoaColorxlat(rom, colorSet, fighters);
     if (rom.game.colors.curve) return buildCurveColorxlat(rom, colorSet);
     if (rom.game.colors.ramp) return buildRampColorxlat(rom, colorSet);
     if (rom.game.colors.doa) return buildDoaColorxlat(rom, colorSet, fighters);
@@ -456,6 +465,66 @@ export function buildColorxlat(rom, { colorSet = 0, tint = [1, 1, 1], fighters =
 
     sendFighterColors(dv, put, rgb, C, fighters, palette);
 
+    return out;
+}
+
+/* ---- Dead or Alive ------------------------------------------------------ */
+
+/*
+ * DOA starts with a fixed grey curve, then FUN_0005D7C0 replaces five odd
+ * rows for P1, five for P2 and five for the stage.  The replacement blocks
+ * are already RGB bytes: five groups of 64 interleaved triples.  They are
+ * copied to the low byte of the corresponding 16-bit colorxlat entries.
+ *
+ * The base curve below is the exact integer form recovered from two complete
+ * 0xC000-byte machine captures.  Every unchanged even row and row 31 matches
+ * it byte-for-byte; the uploader's three replacement regions account for
+ * every remaining difference between the captures.
+ */
+function buildDoaColorxlat(rom, colorSet, fighters) {
+    const C = rom.game.colors.doa;
+    const cv = rom.mainCpuView;
+    const bytes = rom.maincpu;
+    const out = new Uint8Array(CXLAT_BYTES);
+    const put = cxlatWriter(out);
+
+    for (let row = 0; row < 32; row++) {
+        const full = row === 0 ? 0 : 64 + Math.trunc(row * 37 / 6);
+        for (let luma = 0; luma < 256; luma++) {
+            const value = luma < 64
+                ? Math.max(row, Math.trunc(full * (luma + 1) / 64))
+                : full;
+            for (let ch = 0; ch < 3; ch++) put(ch, row, luma, value);
+        }
+    }
+
+    const upload = (pointerTable, index, row0) => {
+        const at = pointerTable + index * 4;
+        if (index < 0 || at < 0 || at + 4 > cv.byteLength) return;
+        const src = cv.getUint32(at, true);
+        if (!src || src + 5 * 64 * 3 > bytes.length) return;
+        for (let group = 0; group < 5; group++) {
+            for (let luma = 0; luma < 64; luma++) {
+                const p = src + (group * 64 + luma) * 3;
+                for (let ch = 0; ch < 3; ch++) {
+                    put(ch, row0 + group * 2, luma, bytes[p + ch]);
+                }
+            }
+        }
+    };
+
+    /* Selector bit 7 chooses the upper family and the low nibble its source
+     * bank. The program flattens that pair into a 30-pointer directory. */
+    fighters.slice(0, 2).forEach((selector, player) => {
+        if (!(selector >= 0)) return;
+        const source = ((selector >>> 7) & 1) * 15 + (selector & 0x0f);
+        upload(C.fighterSources, source, player ? 11 : 1);
+    });
+
+    /* Texture source order and stage-id order differ (Forest is the first
+     * obvious example), so the profile states the translation explicitly. */
+    const stage = C.stageForTextureSet?.[colorSet];
+    if (stage != null) upload(C.stageSources, stage, 21);
     return out;
 }
 

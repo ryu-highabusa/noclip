@@ -61,6 +61,12 @@ const CONTROLS = {
         { key: 'texset', sel: '#model-texset', def: 'auto' },
         { key: 'fighter', sel: '#model-fighter', def: '0' },
     ],
+    texture: [
+        { key: 'texsrc', sel: '#texture-set', def: '0' },
+        { key: 'sheet', sel: '#texture-sheet', def: 'both' },
+        { key: 'texdisplay', sel: '#texture-display', def: 'gray' },
+        { key: 'texfit', sel: '#texture-fit' },
+    ],
     anim: [
         { key: 'skel', sel: '#char-skel' },
         { key: 'squish', sel: '#char-squish' },
@@ -171,7 +177,7 @@ export function readViewLink(hash = location.hash) {
     const int = (s) => (s !== null && /^-?\d+$/.test(s) ? Number(s) : null);
     return {
         game: p.get('game'),
-        tab: ['stage', 'model', 'anim', 'cell'].includes(p.get('tab')) ? p.get('tab') : null,
+        tab: ['stage', 'model', 'texture', 'anim', 'cell'].includes(p.get('tab')) ? p.get('tab') : null,
         stage: int(p.get('stage')),
         model: int(p.get('model')),
         cell: int(p.get('cell')),
@@ -221,6 +227,7 @@ export function describeViewLink(link) {
     const where = {
         stage: link.stage !== null ? `stage ${link.stage}` : 'the Stages tab',
         model: link.model !== null ? `model ${link.model}` : 'the Models tab',
+        texture: 'the Textures tab',
         anim: 'the Animation tab',
         cell: link.cell !== null ? `cell ${link.cell}` : 'the Cells tab',
     }[link.tab] ?? 'a view';

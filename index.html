@@ -286,6 +286,7 @@
       <nav id="tabs">
         <button data-tab="stage" class="active">Stages</button>
         <button data-tab="model">Models</button>
+        <button data-tab="texture">Textures</button>
         <button data-tab="anim">Animation</button>
         <button data-tab="cell">Cells</button>
       </nav>
@@ -347,6 +348,14 @@
       <div class="field">
         <input type="search" id="model-search" placeholder="Model index or range (e.g. 500-520)">
       </div>
+      <!-- A profile may divide a large anonymous model table into researched
+           families. Hidden for games that do not provide that catalog. -->
+      <div class="field" id="model-catalog-field" hidden>
+        <label>Model group</label>
+        <select id="model-catalog-group"></select>
+        <label>Bank</label>
+        <select id="model-catalog-bank"></select>
+      </div>
       <div class="field row">
         <label class="check"><input type="checkbox" id="model-only-mesh" checked> only models with geometry</label>
       </div>
@@ -365,6 +374,42 @@
       <div id="model-count" class="dim"></div>
       <div id="model-list" class="modellist"></div>
       <div id="model-info" class="meta-block"></div>
+    </section>
+
+    <!-- Texture RAM independently of a model. The image is the board's raw
+         4-bit texel indices; final colour depends on a polygon's material,
+         luma band and colorxlat and therefore is not intrinsic to the sheet. -->
+    <section class="tabpanel" data-tab="texture" hidden>
+      <div class="field">
+        <label for="texture-set">ROM texture source</label>
+        <select id="texture-set"></select>
+      </div>
+      <div class="field">
+        <label for="texture-sheet">Texture RAM sheet</label>
+        <select id="texture-sheet">
+          <option value="both">Both sheets</option>
+          <option value="0">Sheet 0</option>
+          <option value="1">Sheet 1</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="texture-display">Display</label>
+        <select id="texture-display">
+          <option value="gray">Raw indices — grayscale</option>
+          <option value="zero">Index 0 transparent</option>
+          <option value="false">Index colors — false color</option>
+        </select>
+      </div>
+      <div class="field row">
+        <label class="check"><input type="checkbox" id="texture-fit" checked> fit to view</label>
+      </div>
+      <div id="texture-info" class="meta-block"></div>
+      <div id="texture-cursor" class="mono dim">Move over the image for texel coordinates.</div>
+      <div class="note">
+        These are the sixteen raw texel values unpacked into Model 2 Texture
+        RAM. They have no single correct RGB palette by themselves: each model
+        polygon supplies the palette color and luma band used with colorxlat.
+      </div>
     </section>
 
     <!-- The game's 2D pictures, laid out on the tile chip: js/cells.js. -->
@@ -583,6 +628,8 @@
 
   <main>
     <canvas id="view"></canvas>
+    <!-- Raw Texture RAM atlas, over the 3D view while the Textures tab is up. -->
+    <div id="texture-view" class="fit" hidden><canvas id="texture-canvas"></canvas></div>
     <!-- The Cells tab's picture, over the 3D view while that tab is up. -->
     <canvas id="cell-view" hidden></canvas>
     <div id="hud"></div>

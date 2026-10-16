@@ -250,6 +250,36 @@ export function readModelEntry(rom, index) {
     };
 }
 
+/** The game's culling bounds for a model, when the profile has located the
+ * parallel pointer table. Model 2's Z axis points opposite the viewer's, so
+ * the returned minimum and maximum are converted into viewer coordinates. */
+export function readModelBounds(rom, index) {
+    const b = rom.game.modelBounds;
+    if (!b || index < 0 || index >= rom.game.modelTable.count) return null;
+
+    const pv = b.pointers + index * 4;
+    if (pv < 0 || pv + 4 > rom.mainData.length) return null;
+    const ptr = rom.mainDataView.getUint32(pv, true);
+    const off = ptr - b.addressBase;
+    const end = b.records + b.count * b.recordSize;
+    if (off < b.records || off + b.recordSize > end || off + b.recordSize > rom.mainData.length) return null;
+    if (b.recordSize < 0x1c) return null;
+
+    const f = (n) => rom.mainDataView.getFloat32(off + n * 4, true);
+    const maxX = f(0), maxY = f(1), maxZ = f(2);
+    const minX = f(3), minY = f(4), minZ = f(5);
+    const radius = f(6);
+    if (![maxX, maxY, maxZ, minX, minY, minZ, radius].every(Number.isFinite)
+            || maxX < minX || maxY < minY || maxZ < minZ || radius < 0) return null;
+
+    return {
+        pointer: ptr,
+        min: [minX, minY, -maxZ],
+        max: [maxX, maxY, -minZ],
+        radius,
+    };
+}
+
 /**
  * A model's name, for a game whose ROM carries them; null otherwise.
  *
@@ -258,6 +288,9 @@ export function readModelEntry(rom, index) {
  * the first and take the same names.
  */
 export function readModelName(rom, index) {
+    const catalog = rom.game.modelCatalog?.entries;
+    if (catalog?.[index]) return catalog[index];
+
     const n = rom.game.modelNames;
     if (!n || index < 0) return null;
     const dv = rom.mainDataView;
@@ -289,15 +322,15 @@ export function facePalette(rom) {
 
     const out = new Int32Array(1024).fill(-1);
     if (!p) {
-        const md = rom.mainData;
+        const source = rom[rom.game.paletteRegion ?? 'mainData'];
         /* A game whose upload is shorter than the palette leaves the rest of it
          * at whatever the boot clear put there, so the entries past the count
          * are left as no colour rather than read out of the next table along. */
         const n = Math.min(rom.game.paletteCount ?? 1024, 1024);
         for (let i = 0; i < n; i++) {
             const o = rom.game.paletteOffset + i * 2;
-            if (o + 2 > md.length) break;
-            out[i] = md[o] | (md[o + 1] << 8);
+            if (!source || o + 2 > source.length) break;
+            out[i] = source[o] | (source[o + 1] << 8);
         }
         /* Entries the boot sets by hand once the table is in. */
         for (const [i, c] of rom.game.paletteFixes ?? []) out[i] = c;
